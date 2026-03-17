@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "jsx": "react-jsx",
+    "outDir": "./dist/renderer",
+    "rootDir": "./src/renderer",
+    "resolveJsonModule": true
+  },
+  "include": ["src/renderer/**/*"]
+}

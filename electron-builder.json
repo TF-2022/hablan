@@ -1,0 +1,40 @@
+{
+  "appId": "com.voiceforge.app",
+  "productName": "VoiceForge",
+  "directories": {
+    "output": "release"
+  },
+  "files": ["dist/**/*"],
+  "extraResources": [
+    {
+      "from": "resources/bin",
+      "to": "bin",
+      "filter": ["**/*"]
+    }
+  ],
+  "publish": {
+    "provider": "github",
+    "owner": "TF-2022",
+    "repo": "voiceforge"
+  },
+  "win": {
+    "target": [{ "target": "nsis", "arch": ["x64"] }]
+  },
+  "nsis": {
+    "oneClick": true,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": false,
+    "deleteAppDataOnUninstall": false,
+    "artifactName": "VoiceForge-Setup-${version}.${ext}"
+  },
+  "mac": {
+    "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }],
+    "category": "public.app-category.productivity",
+    "entitlements": "build/entitlements.mac.plist",
+    "entitlementsInherit": "build/entitlements.mac.plist",
+    "extendInfo": {
+      "NSMicrophoneUsageDescription": "VoiceForge needs microphone access for voice dictation.",
+      "NSAppleEventsUsageDescription": "VoiceForge needs accessibility to paste text at your cursor."
+    }
+  }
+}

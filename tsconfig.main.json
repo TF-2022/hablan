@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": "./dist/main",
+    "rootDir": "./src/main",
+    "resolveJsonModule": true
+  },
+  "include": ["src/main/**/*"]
+}

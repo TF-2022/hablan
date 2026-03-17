@@ -1,0 +1,12 @@
+node_modules/
+dist/
+release/
+models/
+resources/bin/win/
+resources/bin/mac/
+resources/icons/icon.png
+*.log
+.env
+.env.local
+CLAUDE.md
+docs/
