@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { api } from "../lib/ipc";
+import { X, RotateCcw, Download, Check, Loader2 } from "lucide-react";
+import { api, ModelProgress } from "../lib/ipc";
 
 interface Settings {
   hotkey: string;
@@ -8,30 +9,42 @@ interface Settings {
   launchAtStartup: boolean;
 }
 
-const MODELS = [
-  { id: "tiny", label: "Tiny", size: "75 Mo", speed: "Ultra rapide" },
-  { id: "base", label: "Base", size: "142 Mo", speed: "Rapide" },
-  { id: "small", label: "Small", size: "466 Mo", speed: "Modéré" },
-  { id: "medium", label: "Medium", size: "1.5 Go", speed: "Lent" },
-];
+interface ModelInfo {
+  id: string;
+  label: string;
+  desc: string;
+  size: string;
+  speedLabel: string;
+  recommended: boolean;
+  downloaded: boolean;
+}
 
 const LANGUAGES = [
   { id: "fr", label: "Français" },
   { id: "en", label: "English" },
   { id: "es", label: "Español" },
   { id: "de", label: "Deutsch" },
-  { id: "auto", label: "Auto-détection" },
+  { id: "auto", label: "Auto" },
 ];
 
-interface Props {
-  onClose: () => void;
-}
-
-export default function SettingsPanel({ onClose }: Props) {
+export default function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const [downloadPct, setDownloadPct] = useState(0);
+  const [appVersion, setAppVersion] = useState("");
 
   useEffect(() => {
     api?.getSettings().then((s) => setSettings(s as Settings));
+    api?.listModels().then((m) => setModels(m as ModelInfo[]));
+    api?.getAppStatus().then((s) => setAppVersion((s as any).version || ""));
+  }, []);
+
+  useEffect(() => {
+    const cleanup = api?.onModelProgress((data: ModelProgress) => {
+      if (data.total > 0) setDownloadPct(Math.round((data.downloaded / data.total) * 100));
+    });
+    return () => cleanup?.();
   }, []);
 
   const update = (key: string, value: any) => {
@@ -40,154 +53,117 @@ export default function SettingsPanel({ onClose }: Props) {
     api?.setSetting(key, value);
   };
 
+  const handleModelSelect = async (id: string) => {
+    const model = models.find((m) => m.id === id);
+    if (!model) return;
+
+    if (model.downloaded) {
+      await api?.switchModel(id);
+      setSettings((s) => s ? { ...s, model: id } : s);
+    } else {
+      setDownloading(id);
+      setDownloadPct(0);
+      const result = await api?.downloadModel(id);
+      if (result?.success) {
+        await api?.switchModel(id);
+        setSettings((s) => s ? { ...s, model: id } : s);
+        setModels((prev) => prev.map((m) => m.id === id ? { ...m, downloaded: true } : m));
+      }
+      setDownloading(null);
+    }
+  };
+
   if (!settings) return null;
 
   return (
-    <div className="w-screen h-screen bg-[#18181b] flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0">
-        <h1 className="text-[16px] font-semibold text-white">Paramètres</h1>
-        <button
-          onClick={onClose}
-          className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors"
-          style={{ background: "rgba(255,255,255,0.06)" }}
-        >
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-            <path d="M1 1L9 9M9 1L1 9" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round" />
-          </svg>
-        </button>
+    <div className="screen">
+      <div className="header">
+        <span className="header-title">Paramètres</span>
+        <button className="icon-btn" onClick={onClose}><X size={14} /></button>
       </div>
 
-      {/* Scrollable content */}
-      <div className="flex-1 px-6 pb-6 space-y-6 overflow-y-auto">
-
-        {/* Raccourci */}
-        <Section title="Raccourci clavier">
+      <div className="overflow-y-auto" style={{ flex: 1, padding: 16, display: "flex", flexDirection: "column", gap: 20 }}>
+        <div>
+          <div className="section-title">Raccourci clavier</div>
           <HotkeyInput value={settings.hotkey} onChange={(v) => update("hotkey", v)} />
-        </Section>
+        </div>
 
-        {/* Langue */}
-        <Section title="Langue de transcription">
-          <div className="flex flex-wrap gap-2">
+        <div>
+          <div className="section-title">Langue de transcription</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {LANGUAGES.map((lang) => (
               <button
                 key={lang.id}
+                className={`chip ${settings.language === lang.id ? "active" : ""}`}
                 onClick={() => update("language", lang.id)}
-                className="px-4 py-2.5 rounded-xl text-[13px] font-medium transition-all"
-                style={{
-                  background: settings.language === lang.id ? "rgba(96,165,250,0.12)" : "rgba(255,255,255,0.03)",
-                  color: settings.language === lang.id ? "#60a5fa" : "rgba(255,255,255,0.5)",
-                  border: settings.language === lang.id ? "1px solid rgba(96,165,250,0.25)" : "1px solid rgba(255,255,255,0.04)",
-                }}
               >
                 {lang.label}
               </button>
             ))}
           </div>
-        </Section>
+        </div>
 
-        {/* Modèle */}
-        <Section title="Modèle Whisper">
-          <div className="space-y-2">
-            {MODELS.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => update("model", m.id)}
-                className="w-full flex items-center justify-between px-4 py-3.5 rounded-xl transition-all text-left"
-                style={{
-                  background: settings.model === m.id ? "rgba(96,165,250,0.1)" : "rgba(255,255,255,0.02)",
-                  border: settings.model === m.id ? "1px solid rgba(96,165,250,0.2)" : "1px solid rgba(255,255,255,0.04)",
-                }}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <span
-                    className="text-[14px] font-semibold shrink-0"
-                    style={{ color: settings.model === m.id ? "#60a5fa" : "rgba(255,255,255,0.75)" }}
-                  >
-                    {m.label}
-                  </span>
-                  <span className="text-[12px] shrink-0" style={{ color: "rgba(255,255,255,0.2)" }}>
-                    {m.size}
-                  </span>
-                </div>
-                <span className="text-[12px] shrink-0 ml-4" style={{ color: "rgba(255,255,255,0.2)" }}>
-                  {m.speed}
-                </span>
-              </button>
-            ))}
+        <div>
+          <div className="section-title">Modèle Whisper</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {models.map((m) => {
+              const active = settings.model === m.id;
+              const isDownloading = downloading === m.id;
+
+              return (
+                <button
+                  key={m.id}
+                  className={`select-btn ${active ? "active" : ""}`}
+                  onClick={() => !isDownloading && handleModelSelect(m.id)}
+                  style={{ opacity: isDownloading ? 0.7 : 1, cursor: isDownloading ? "wait" : "pointer" }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: active ? "var(--blue)" : "var(--fg)" }}>
+                        {m.label}
+                      </span>
+                      <span style={{ fontSize: 11, color: "var(--muted)" }}>{m.size}</span>
+                      {m.downloaded && active && <Check size={12} style={{ color: "var(--green)" }} />}
+                    </div>
+                    {isDownloading && (
+                      <div style={{ height: 3, borderRadius: 2, background: "var(--border)", marginTop: 4, overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${downloadPct}%`, background: "var(--blue)", borderRadius: 2, transition: "width 0.3s" }} />
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, marginLeft: 8 }}>
+                    <span style={{ fontSize: 11, color: "var(--muted)" }}>{m.speedLabel}</span>
+                    {!m.downloaded && !isDownloading && <Download size={12} style={{ color: "var(--muted)" }} />}
+                    {isDownloading && <Loader2 size={12} style={{ color: "var(--blue)", animation: "spin 1s linear infinite" }} />}
+                  </div>
+                </button>
+              );
+            })}
           </div>
-        </Section>
+        </div>
 
-        {/* Système */}
-        <Section title="Système">
-          <div className="space-y-2">
-            <div
-              className="flex items-center justify-between px-4 py-3.5 rounded-xl"
-              style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)" }}
-            >
-              <span className="text-[13px]" style={{ color: "rgba(255,255,255,0.6)" }}>
-                Lancer au démarrage
-              </span>
-              <Toggle
-                checked={settings.launchAtStartup}
-                onChange={(v) => update("launchAtStartup", v)}
-              />
+        <div>
+          <div className="section-title">Système</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div className="card-row">
+              <span style={{ fontSize: 13, color: "var(--muted)" }}>Lancer au démarrage</span>
+              <button className={`toggle ${settings.launchAtStartup ? "on" : ""}`} onClick={() => update("launchAtStartup", !settings.launchAtStartup)}>
+                <div className="toggle-knob" />
+              </button>
             </div>
-            <button
-              onClick={() => update("windowPosition", null)}
-              className="w-full flex items-center justify-between px-4 py-3.5 rounded-xl transition-all text-left hover:bg-white/[0.04]"
-              style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)" }}
-            >
-              <span className="text-[13px]" style={{ color: "rgba(255,255,255,0.6)" }}>
-                Réinitialiser la position
-              </span>
-              <span className="text-[11px]" style={{ color: "rgba(255,255,255,0.2)" }}>
-                Centre bas
+            <button className="select-btn" onClick={() => update("windowPosition", null)}>
+              <span style={{ fontSize: 13, color: "var(--muted)", display: "flex", alignItems: "center", gap: 8 }}>
+                <RotateCcw size={14} /> Réinitialiser la position
               </span>
             </button>
           </div>
-        </Section>
+        </div>
       </div>
 
-      {/* Footer */}
-      <div className="px-6 py-3 text-center shrink-0" style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
-        <span className="text-[11px]" style={{ color: "rgba(255,255,255,0.15)" }}>
-          VoiceForge v0.1.0 - Glissez le widget pour le repositionner
-        </span>
+      <div style={{ padding: "10px 16px", textAlign: "center", borderTop: "1px solid var(--border)", flexShrink: 0 }}>
+        <span style={{ fontSize: 11, color: "var(--muted)", opacity: 0.5 }}>CursorVoice {appVersion ? `v${appVersion}` : ""}</span>
       </div>
     </div>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <h2
-        className="text-[11px] font-semibold uppercase tracking-wider mb-3"
-        style={{ color: "rgba(255,255,255,0.25)" }}
-      >
-        {title}
-      </h2>
-      {children}
-    </div>
-  );
-}
-
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      onClick={() => onChange(!checked)}
-      className="relative w-11 h-[24px] rounded-full transition-all duration-200"
-      style={{ background: checked ? "rgba(34,197,94,0.5)" : "rgba(255,255,255,0.1)" }}
-    >
-      <div
-        className="absolute top-[3px] w-[18px] h-[18px] rounded-full bg-white transition-all duration-200"
-        style={{
-          left: checked ? "calc(100% - 21px)" : "3px",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
-        }}
-      />
-    </button>
   );
 }
 
@@ -216,15 +192,13 @@ function HotkeyInput({ value, onChange }: { value: string; onChange: (v: string)
 
   return (
     <button
+      className={`select-btn ${listening ? "active" : ""}`}
       onClick={() => setListening(true)}
-      className="w-full px-4 py-3 rounded-xl text-[13px] font-mono text-left transition-all"
-      style={{
-        background: listening ? "rgba(96,165,250,0.1)" : "rgba(255,255,255,0.03)",
-        color: listening ? "#60a5fa" : "rgba(255,255,255,0.6)",
-        border: listening ? "1px solid rgba(96,165,250,0.25)" : "1px solid rgba(255,255,255,0.04)",
-      }}
+      style={{ fontFamily: "monospace", ...(listening ? { boxShadow: "0 0 0 2px hsla(217, 91%, 60%, 0.15)" } : {}) }}
     >
-      {listening ? "Appuyez sur votre raccourci..." : display}
+      <span style={{ color: listening ? "var(--blue)" : "var(--muted)" }}>
+        {listening ? "Appuyez sur votre raccourci..." : display}
+      </span>
     </button>
   );
 }

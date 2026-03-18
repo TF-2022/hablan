@@ -52,6 +52,19 @@ if (PLATFORM === "win") {
     // Use PowerShell to extract (available on all Windows)
     execSync(`powershell -Command "Expand-Archive -Force '${whisperZip}' '${BIN_DIR}'"`, { stdio: "inherit" });
     fs.unlinkSync(whisperZip);
+    // Copy essential binaries from Release/ to bin root
+    const releaseDir = path.join(BIN_DIR, "Release");
+    if (fs.existsSync(releaseDir)) {
+      const essentials = ["whisper-cli.exe", "whisper-server.exe", "whisper.dll", "ggml.dll", "ggml-base.dll", "ggml-cpu.dll"];
+      for (const file of essentials) {
+        const src = path.join(releaseDir, file);
+        const dest = path.join(BIN_DIR, file);
+        if (fs.existsSync(src) && !fs.existsSync(dest)) {
+          fs.copyFileSync(src, dest);
+          console.log(`  ✅ ${file} copied`);
+        }
+      }
+    }
     console.log("  ✅ whisper.cpp ready\n");
   } else {
     console.log("✅ whisper.cpp already present\n");

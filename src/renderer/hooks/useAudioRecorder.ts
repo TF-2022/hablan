@@ -37,15 +37,13 @@ export function useAudioRecorder() {
         const blob = new Blob(chunksRef.current, { type: "audio/webm" });
         const buffer = await blob.arrayBuffer();
 
-        // Send to main process for processing
         api?.sendAudio(buffer);
 
-        // Release microphone
         audioStream.getTracks().forEach((t) => t.stop());
         setStream(null);
       };
 
-      recorder.start(100); // 100ms chunks for waveform
+      recorder.start(100);
       mediaRecorderRef.current = recorder;
       setIsRecording(true);
     } catch (err) {

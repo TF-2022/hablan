@@ -1,13 +1,28 @@
+process.noDeprecation = true;
 import { app, BrowserWindow, globalShortcut, ipcMain, clipboard, Notification } from "electron";
+import { appendFileSync } from "node:fs";
+
+const LOG_PATH = require("path").join(app.getPath("userData"), "cursorvoice.log");
+function log(msg: string) {
+  const line = `[${new Date().toISOString()}] ${msg}\n`;
+  try { appendFileSync(LOG_PATH, line); } catch {}
+  console.log(msg);
+}
+
+// Prevent GPU cache errors on Windows (single instance lock)
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+}
+app.commandLine.appendSwitch("disable-gpu-cache");
 import path from "node:path";
 import fs from "node:fs";
 import { autoUpdater } from "electron-updater";
 import { setupTray } from "./tray";
 import { getConfig, config } from "./config";
 import { convertToWav } from "./audio-converter";
-import { transcribe, startWhisperServer, stopWhisperServer } from "./transcriber";
+import { transcribe, startWhisperServer, stopWhisperServer, restartWithModel } from "./transcriber";
 import { injectText } from "./injector";
-import { getActiveModelPath, isAnyModelDownloaded } from "./model-manager";
+import { MODELS, getActiveModelPath, isAnyModelDownloaded, isModelDownloaded, downloadModel } from "./model-manager";
 import { getWhisperPath, getFfmpegPath } from "./bin-resolver";
 
 let recordingWindow: BrowserWindow | null = null;
@@ -23,25 +38,40 @@ function send(channel: string, ...args: any[]) {
 
 function createRecordingWindow(): BrowserWindow {
   const win = new BrowserWindow({
-    width: 480,
-    height: 180,
+    width: 200,
+    height: 72,
     useContentSize: true, // Size = content area, not window frame
     show: false,
     frame: false,
-    transparent: false,
+    transparent: true,
+    hasShadow: false,
     alwaysOnTop: true,
     skipTaskbar: true,
     resizable: true,
     movable: true,
-    backgroundColor: "#18181b",
     webPreferences: {
       preload: path.join(__dirname, "../preload/preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
+      zoomFactor: 1,
     },
   });
 
   win.setAlwaysOnTop(true, "screen-saver");
+
+  // Prevent DPI scaling from clipping content on Windows (e.g. 125% DPI)
+  win.webContents.on("did-finish-load", () => {
+    win.webContents.setZoomFactor(1);
+  });
+
+  // Dev mode: open DevTools + Ctrl+Shift+I toggle
+  if (process.env.ELECTRON_RENDERER_URL) {
+    win.webContents.on("before-input-event", (event, input) => {
+      if (input.control && input.shift && input.key === "I") {
+        win.webContents.toggleDevTools();
+      }
+    });
+  }
 
   if (process.env.ELECTRON_RENDERER_URL) {
     win.loadURL(process.env.ELECTRON_RENDERER_URL);
@@ -66,27 +96,50 @@ function createRecordingWindow(): BrowserWindow {
   return win;
 }
 
-function toggleRecording() {
+function registerStopShortcuts() {
+  try {
+    globalShortcut.register("Escape", stopRecording);
+  } catch {}
+}
+
+function unregisterStopShortcuts() {
+  try {
+    globalShortcut.unregister("Escape");
+  } catch {}
+}
+
+function startRecording() {
+  if (isRecording) return;
   if (!recordingWindow || recordingWindow.isDestroyed()) {
     recordingWindow = createRecordingWindow();
   }
 
-  isRecording = !isRecording;
-
-  if (isRecording) {
-    // Recording widget - saved position or bottom center
-    recordingWindow.setContentSize(480, 180);
-    const savedPos = getConfig("windowPosition");
-    if (savedPos) {
-      recordingWindow.setPosition(savedPos.x, savedPos.y);
-    } else {
-      const { width: screenW, height: screenH } = require("electron").screen.getPrimaryDisplay().workAreaSize;
-      recordingWindow.setPosition(Math.round((screenW - 480) / 2), screenH - 200);
-    }
-    recordingWindow.showInactive();
-    send("recording:start");
+  isRecording = true;
+  recordingWindow.setContentSize(200, 72);
+  const savedPos = getConfig("windowPosition");
+  if (savedPos) {
+    recordingWindow.setPosition(savedPos.x, savedPos.y);
   } else {
-    send("recording:stop");
+    const { width: screenW, height: screenH } = require("electron").screen.getPrimaryDisplay().workAreaSize;
+    recordingWindow.setPosition(Math.round((screenW - 200) / 2), screenH - 100);
+  }
+  recordingWindow.showInactive();
+  send("recording:start");
+  registerStopShortcuts();
+}
+
+function stopRecording() {
+  if (!isRecording) return;
+  isRecording = false;
+  unregisterStopShortcuts();
+  send("recording:stop");
+}
+
+function toggleRecording() {
+  if (isRecording) {
+    stopRecording();
+  } else {
+    startRecording();
   }
 }
 
@@ -99,13 +152,19 @@ app.whenReady().then(async () => {
   // Create recording window
   recordingWindow = createRecordingWindow();
 
+
   // Setup system tray
   setupTray(app, toggleRecording, () => {
     if (recordingWindow && !recordingWindow.isDestroyed()) {
-      recordingWindow.setContentSize(520, 600);
-      recordingWindow.center();
-      recordingWindow.show();
+      // Send settings IPC BEFORE showing to avoid pill flash
       send("show:settings");
+      setTimeout(() => {
+        if (recordingWindow && !recordingWindow.isDestroyed()) {
+          recordingWindow.setContentSize(520, 600);
+          recordingWindow.center();
+          recordingWindow.show();
+        }
+      }, 50);
     }
   });
 
@@ -113,72 +172,88 @@ app.whenReady().then(async () => {
   globalShortcut.unregisterAll();
   const hotkey = getConfig("hotkey");
   const success = globalShortcut.register(hotkey, toggleRecording);
-  console.log(success ? `Hotkey registered: ${hotkey}` : `Hotkey FAILED: ${hotkey}`);
 
-  // === IPC Handlers (register BEFORE server start so they're ready immediately) ===
-
-  // Process recorded audio (full pipeline)
+  // IPC Handlers (register BEFORE server start so they're ready immediately)
   ipcMain.handle("audio:process", async (_event, buffer: ArrayBuffer) => {
+    if (!buffer || buffer.byteLength === 0) {
+      send("status:update", "empty");
+      return { success: false, error: "Empty audio" };
+    }
+    if (buffer.byteLength > 50 * 1024 * 1024) {
+      send("status:update", "error");
+      return { success: false, error: "Audio too large" };
+    }
+
     const pipelineStart = Date.now();
+
+    function hideIfNotRecording(delay = 0) {
+      const doHide = () => {
+        if (!isRecording && recordingWindow && !recordingWindow.isDestroyed()) {
+          recordingWindow.hide();
+        }
+      };
+      if (delay > 0) setTimeout(doHide, delay);
+      else doHide();
+    }
 
     try {
       send("status:update", "transcribing");
 
-      // 1. Save audio to temp file
       const tempDir = app.getPath("temp");
       const ts = Date.now();
       const webmPath = path.join(tempDir, `vf-${ts}.webm`);
       fs.writeFileSync(webmPath, Buffer.from(buffer));
 
-      // 2. Convert WebM → WAV 16kHz mono (+ VAD silence removal)
       const wavPath = path.join(tempDir, `vf-${ts}.wav`);
       await convertToWav(webmPath, wavPath);
 
-      // 3. Transcribe (server if available, CLI fallback)
       const modelPath = getActiveModelPath();
+      if (!fs.existsSync(modelPath)) {
+        throw new Error(`No model found at ${modelPath}. Download a model first.`);
+      }
       const text = await transcribe({
         wavPath,
         modelPath,
         language: getConfig("language"),
       });
 
-      // 4. Cleanup
       try { fs.unlinkSync(webmPath); fs.unlinkSync(wavPath); } catch {}
 
       const totalMs = Date.now() - pipelineStart;
-      console.log(`[pipeline] "${text?.slice(0, 60)}" (${totalMs}ms)`);
 
       if (!text?.trim()) {
         send("status:update", "empty");
-        setTimeout(() => {
-          if (recordingWindow && !recordingWindow.isDestroyed()) recordingWindow.hide();
-        }, 1200);
+        hideIfNotRecording(1200);
         return { success: true, text: "" };
       }
 
-      // 5. Hide window + inject immediately
-      if (recordingWindow && !recordingWindow.isDestroyed()) {
-        recordingWindow.hide();
-      }
+      // Hide + inject
+      hideIfNotRecording();
       await new Promise((r) => setTimeout(r, 100));
       await injectText(text.trim());
 
-      isRecording = false;
       return { success: true, text: text.trim() };
     } catch (err: any) {
-      console.error("[pipeline] Error:", err.message);
+      log("[pipeline] Error: " + err.message + "\n" + err.stack);
       send("status:update", "error");
-      setTimeout(() => {
-        if (recordingWindow && !recordingWindow.isDestroyed()) recordingWindow.hide();
-      }, 2000);
-      isRecording = false;
+      hideIfNotRecording(2000);
       return { success: false, error: err.message };
     }
   });
 
-  // Settings
+  // User stopped recording from renderer (Space/Escape/button)
+  ipcMain.handle("recording:user-stop", () => {
+    isRecording = false;
+  });
+
+  ipcMain.handle("onboarding:complete", () => {
+    config.set("onboardingDone", true);
+  });
+
   ipcMain.handle("settings:get", () => config.store);
+  const ALLOWED_SETTINGS = ["hotkey", "model", "language", "launchAtStartup", "pasteMethod", "windowPosition", "inputDevice", "onboardingDone"];
   ipcMain.handle("settings:set", (_event, key: string, value: any) => {
+    if (!ALLOWED_SETTINGS.includes(key)) return;
     config.set(key as any, value);
     if (key === "hotkey") {
       globalShortcut.unregisterAll();
@@ -189,7 +264,6 @@ app.whenReady().then(async () => {
     }
   });
 
-  // Window control
   ipcMain.handle("window:resize", (_event, width: number, height: number) => {
     if (recordingWindow && !recordingWindow.isDestroyed()) {
       recordingWindow.setContentSize(width, height);
@@ -202,29 +276,38 @@ app.whenReady().then(async () => {
     }
   });
 
-  // App status
+  ipcMain.handle("window:hide", () => {
+    if (recordingWindow && !recordingWindow.isDestroyed()) {
+      recordingWindow.hide();
+    }
+  });
+
   ipcMain.handle("app:status", () => ({
     hasModel: isAnyModelDownloaded(),
     hasWhisper: fs.existsSync(getWhisperPath()),
     hasFfmpeg: fs.existsSync(getFfmpegPath()),
     platform: process.platform,
+    version: app.getVersion(),
+    onboardingDone: getConfig("onboardingDone"),
   }));
 
-  // Model management
   ipcMain.handle("model:list", () => {
-    const { MODELS, isModelDownloaded } = require("./model-manager");
     return Object.entries(MODELS).map(([id, info]: [string, any]) => ({
       id,
       ...info,
-      downloaded: isModelDownloaded(id),
+      downloaded: isModelDownloaded(id as any),
     }));
   });
 
-  ipcMain.handle("model:download", async (event, name: string) => {
-    const { downloadModel } = require("./model-manager");
+  ipcMain.handle("model:download", async (_event, name: string) => {
     try {
-      await downloadModel(name, (downloaded: number, total: number) => {
-        send("model:progress", { name, downloaded, total });
+      let lastUpdate = 0;
+      await downloadModel(name as any, (downloaded: number, total: number) => {
+        const now = Date.now();
+        if (now - lastUpdate > 200 || downloaded >= total) {
+          lastUpdate = now;
+          send("model:progress", { name, downloaded, total });
+        }
       });
       return { success: true };
     } catch (err: any) {
@@ -234,51 +317,61 @@ app.whenReady().then(async () => {
 
   ipcMain.handle("model:switch", async (_event, name: string) => {
     config.set("model", name as any);
-    // Restart whisper-server with new model
     const modelPath = getActiveModelPath();
     if (fs.existsSync(modelPath)) {
-      console.log(`[model] Switching to ${name}, restarting server...`);
-      stopWhisperServer();
-      try {
-        await startWhisperServer(modelPath);
-        console.log(`[model] Server restarted with ${name}`);
-        return { success: true };
-      } catch (err: any) {
-        console.warn(`[model] Server restart failed: ${err.message}`);
-        return { success: true }; // CLI fallback still works
-      }
+      restartWithModel(modelPath).catch(() => {});
+      return { success: true };
     }
     return { success: false, error: "Model not found" };
   });
+  const hasWhisper = fs.existsSync(getWhisperPath());
+  const hasFfmpeg = fs.existsSync(getFfmpegPath());
+  const hasModel = isAnyModelDownloaded();
 
-  // Start whisper-server in background AFTER all handlers are registered
-  if (isAnyModelDownloaded()) {
+  if (!hasWhisper || !hasFfmpeg) {
+    log("[startup] Missing binaries! Run 'npm run setup'");
+  }
+
+  const needsOnboarding = !getConfig("onboardingDone") || !hasModel;
+  if (needsOnboarding && recordingWindow && !recordingWindow.isDestroyed()) {
+    // Show window immediately — renderer will display onboarding
+    recordingWindow.once("ready-to-show", () => {
+      if (!recordingWindow || recordingWindow.isDestroyed()) return;
+      recordingWindow.setContentSize(420, 520);
+      recordingWindow.center();
+      recordingWindow.show();
+    });
+    // Fallback: if ready-to-show already fired, show after a short delay
+    setTimeout(() => {
+      if (recordingWindow && !recordingWindow.isDestroyed() && !recordingWindow.isVisible()) {
+        recordingWindow.setContentSize(420, 520);
+        recordingWindow.center();
+        recordingWindow.show();
+      }
+    }, 2000);
+  }
+  // Start whisper-server in background (model stays in RAM = faster transcription)
+  if (hasModel && hasWhisper) {
     const modelPath = getActiveModelPath();
     if (fs.existsSync(modelPath)) {
-      console.log("[startup] Starting whisper-server in background...");
-      startWhisperServer(modelPath)
-        .then(() => console.log("[startup] Whisper server ready!"))
-        .catch((err: any) => console.warn("[startup] Server failed, using CLI:", err.message));
+      startWhisperServer(modelPath).catch(() => {});
     }
   }
 
-  // Auto-updater - check for updates silently
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
-  autoUpdater.logger = null; // Silence logs
+  autoUpdater.logger = null;
 
   autoUpdater.on("update-available", (info) => {
-    console.log(`[update] New version available: ${info.version}`);
     new Notification({
-      title: "VoiceForge - Mise à jour disponible",
+      title: "CursorVoice - Mise à jour disponible",
       body: `Version ${info.version} en cours de téléchargement...`,
     }).show();
   });
 
   autoUpdater.on("update-downloaded", (info) => {
-    console.log(`[update] Update downloaded: ${info.version}`);
     new Notification({
-      title: "VoiceForge - Mise à jour prête",
+      title: "CursorVoice - Mise à jour prête",
       body: `Version ${info.version} sera installée au prochain redémarrage.`,
     }).show();
   });
@@ -286,13 +379,10 @@ app.whenReady().then(async () => {
   autoUpdater.on("error", (err) => {
     console.warn("[update] Auto-update error:", err.message);
   });
-
-  // Check for updates 5 seconds after launch, then every 4 hours
   setTimeout(() => autoUpdater.checkForUpdatesAndNotify(), 5000);
   setInterval(() => autoUpdater.checkForUpdatesAndNotify(), 4 * 60 * 60 * 1000);
 });
 
-// Keep app alive in tray
 app.on("window-all-closed", (e: Event) => e.preventDefault());
 
 app.on("before-quit", () => {

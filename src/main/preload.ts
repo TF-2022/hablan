@@ -1,23 +1,20 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 contextBridge.exposeInMainWorld("electronAPI", {
-  // Audio
   sendAudio: (buffer: ArrayBuffer) => ipcRenderer.invoke("audio:process", buffer),
+  notifyStop: () => ipcRenderer.invoke("recording:user-stop"),
+  completeOnboarding: () => ipcRenderer.invoke("onboarding:complete"),
 
-  // Settings
   getSettings: () => ipcRenderer.invoke("settings:get"),
   setSetting: (key: string, value: any) =>
     ipcRenderer.invoke("settings:set", key, value),
 
-  // App status
   getAppStatus: () => ipcRenderer.invoke("app:status"),
 
-  // Models
   listModels: () => ipcRenderer.invoke("model:list"),
   downloadModel: (name: string) => ipcRenderer.invoke("model:download", name),
   switchModel: (name: string) => ipcRenderer.invoke("model:switch", name),
 
-  // Listeners
   onStartRecording: (cb: () => void) => {
     ipcRenderer.on("recording:start", () => cb());
     return () => ipcRenderer.removeAllListeners("recording:start");
@@ -43,8 +40,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     return () => ipcRenderer.removeAllListeners("model:progress");
   },
 
-  // Window control
   resizeWindow: (width: number, height: number) =>
     ipcRenderer.invoke("window:resize", width, height),
   centerWindow: () => ipcRenderer.invoke("window:center"),
+  hideWindow: () => ipcRenderer.invoke("window:hide"),
 });

@@ -3,15 +3,17 @@ import fs from "node:fs";
 import { app } from "electron";
 
 function getBaseBinPath(): string {
+  const platform = process.platform === "darwin" ? "mac" : "win";
+
   if (app.isPackaged) {
-    return path.join(process.resourcesPath, "bin");
+    return path.join(process.resourcesPath, "bin", platform);
   }
-  // Dev: prefer userData/bin (safe path without unicode/emoji)
+
   const userDataBin = path.join(app.getPath("userData"), "bin");
   if (fs.existsSync(userDataBin)) {
     return userDataBin;
   }
-  const platform = process.platform === "darwin" ? "mac" : "win";
+
   return path.join(app.getAppPath(), "resources", "bin", platform);
 }
 

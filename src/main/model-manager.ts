@@ -6,28 +6,44 @@ import { getConfig } from "./config";
 
 export const MODELS = {
   tiny: {
-    size: "75 MB",
-    speed: "Ultra fast (~0.3s for 10s audio)",
-    accuracy: "Good",
+    label: "Rapide",
+    desc: "Transcription basique, très rapide",
+    size: "75 Mo",
+    speedLabel: "Ultra rapide",
+    recommended: false,
     url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin",
   },
   base: {
-    size: "142 MB",
-    speed: "Fast (~0.6s for 10s audio)",
-    accuracy: "Better",
+    label: "Standard",
+    desc: "Bon compromis vitesse/qualité",
+    size: "142 Mo",
+    speedLabel: "Rapide",
+    recommended: false,
     url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin",
   },
   small: {
-    size: "466 MB",
-    speed: "Moderate (~1.7s for 10s audio)",
-    accuracy: "Best for MVP",
+    label: "Précis",
+    desc: "Meilleur compromis vitesse/qualité",
+    size: "466 Mo",
+    speedLabel: "Rapide",
+    recommended: true,
     url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
   },
   medium: {
-    size: "1.5 GB",
-    speed: "Slow (~5s for 10s audio)",
-    accuracy: "Excellent",
+    label: "Avancé",
+    desc: "Excellente qualité",
+    size: "1.5 Go",
+    speedLabel: "Lent",
+    recommended: false,
     url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin",
+  },
+  "large-v3-turbo": {
+    label: "Turbo",
+    desc: "Meilleure précision, nécessite GPU",
+    size: "1.6 Go",
+    speedLabel: "Lent (CPU) / Rapide (GPU)",
+    recommended: false,
+    url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin",
   },
 } as const;
 
@@ -54,12 +70,26 @@ export function isAnyModelDownloaded(): boolean {
 
 export function getActiveModelPath(): string {
   const name = getConfig("model");
-  // Prefer userData, fallback to local project dir
+
+  // Check configured model in both locations
   const userPath = path.join(getModelsDir(), `ggml-${name}.bin`);
   if (fs.existsSync(userPath)) return userPath;
   const localPath = path.join(getLocalModelsDir(), `ggml-${name}.bin`);
   if (fs.existsSync(localPath)) return localPath;
-  return userPath; // Will fail gracefully if not found
+
+  // Configured model not found — fallback to any available model
+  for (const fallback of Object.keys(MODELS) as ModelName[]) {
+    const fbUser = path.join(getModelsDir(), `ggml-${fallback}.bin`);
+    if (fs.existsSync(fbUser)) {
+      return fbUser;
+    }
+    const fbLocal = path.join(getLocalModelsDir(), `ggml-${fallback}.bin`);
+    if (fs.existsSync(fbLocal)) {
+      return fbLocal;
+    }
+  }
+
+  return userPath;
 }
 
 export function downloadModel(
@@ -72,17 +102,20 @@ export function downloadModel(
   fs.mkdirSync(getModelsDir(), { recursive: true });
 
   return new Promise((resolve, reject) => {
-    function doRequest(url: string) {
+    function doRequest(url: string, redirects = 0) {
+      if (redirects > 5) {
+        reject(new Error("Too many redirects"));
+        return;
+      }
       https
         .get(url, (response) => {
-          // Handle redirects (HuggingFace uses them)
           if (
             response.statusCode &&
             response.statusCode >= 300 &&
             response.statusCode < 400 &&
             response.headers.location
           ) {
-            doRequest(response.headers.location);
+            doRequest(response.headers.location, redirects + 1);
             return;
           }
 

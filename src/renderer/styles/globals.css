@@ -1,4 +1,4 @@
-@import "tailwindcss";
+/* CursorVoice — Design System (shadcn-inspired dark theme) */
 
 * {
   margin: 0;
@@ -6,21 +6,406 @@
   box-sizing: border-box;
 }
 
+:root {
+  --bg: hsl(240 10% 3.9%);
+  --fg: hsl(0 0% 98%);
+  --card: hsl(240 6% 6%);
+  --secondary: hsl(240 3.7% 15.9%);
+  --muted: hsl(240 5% 64.9%);
+  --border: hsl(240 3.7% 15.9%);
+  --ring: hsl(240 4.9% 83.9%);
+  --radius: 8px;
+  --blue: hsl(217 91% 60%);
+  --green: hsl(142 76% 36%);
+  --red: hsl(0 84% 60%);
+}
+
 html, body, #root {
   width: 100%;
   height: 100%;
-  background: #18181b;
+  background: transparent;
   overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   user-select: none;
-  color: #fafafa;
+  color: var(--fg);
+  font-size: 14px;
+  line-height: 1.5;
 }
 
-.drag-region {
-  -webkit-app-region: drag;
+/* ─── Drag regions ─── */
+.drag-region { -webkit-app-region: drag; }
+.no-drag { -webkit-app-region: no-drag; }
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar { width: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--secondary); border-radius: 5px; border: 2px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+/* ─── Screen container ─── */
+.screen {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  overflow: hidden;
+  border-radius: 12px;
 }
 
-.no-drag {
-  -webkit-app-region: no-drag;
+/* ─── Header ─── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.header-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+/* ─── Icon button (shadcn ghost) ─── */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.icon-btn:hover {
+  background: var(--secondary);
+  color: var(--fg);
+}
+
+.icon-btn:active {
+  transform: scale(0.95);
+}
+
+/* ─── Primary button ─── */
+.btn-primary {
+  width: 100%;
+  height: 40px;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--fg);
+  color: var(--bg);
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+}
+
+.btn-primary:active {
+  transform: scale(0.98);
+}
+
+/* ─── Section title ─── */
+.section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+/* ─── Select button (language, model) ─── */
+.select-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: var(--fg);
+}
+
+.select-btn:hover {
+  background: var(--secondary);
+}
+
+.select-btn:active {
+  transform: scale(0.98);
+}
+
+.select-btn.active {
+  background: hsla(217, 91%, 60%, 0.08);
+  border-color: hsla(217, 91%, 60%, 0.2);
+}
+
+/* ─── Chip (inline select) ─── */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.chip:hover {
+  color: var(--fg);
+}
+
+.chip:active {
+  transform: scale(0.95);
+}
+
+.chip.active {
+  background: hsla(217, 91%, 60%, 0.1);
+  border-color: hsla(217, 91%, 60%, 0.2);
+  color: var(--blue);
+}
+
+/* ─── Card row ─── */
+.card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+/* ─── Feature row ─── */
+.feature-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.feature-icon {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--secondary);
+  color: var(--blue);
+}
+
+.feature-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.feature-desc {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 1px;
+}
+
+/* ─── Toggle ─── */
+.toggle {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  background: var(--secondary);
+}
+
+.toggle.on {
+  background: hsla(142, 76%, 36%, 0.5);
+}
+
+.toggle-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--fg);
+  transition: left 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.toggle.on .toggle-knob {
+  left: calc(100% - 19px);
+}
+
+/* ─── Badge ─── */
+.badge {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: hsla(217, 91%, 60%, 0.12);
+  color: var(--blue);
+  white-space: nowrap;
+}
+
+/* ─── Kbd ─── */
+kbd {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: monospace;
+  font-weight: 500;
+  background: var(--secondary);
+  border: 1px solid var(--border);
+  color: var(--fg);
+}
+
+/* ─── Recording window ─── */
+.accent-bar {
+  height: 2px;
+  flex-shrink: 0;
+  transition: background-color 0.5s;
+}
+
+.waveform-area {
+  flex: 1;
+  margin: 0 12px 8px;
+  border-radius: var(--radius);
+  background: var(--secondary);
+  overflow: hidden;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transition: background-color 0.3s;
+}
+
+.status-label {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: color 0.3s;
+}
+
+/* ─── Onboarding ─── */
+.onboard-logo {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: hsla(217, 91%, 60%, 0.12);
+  border: 1px solid hsla(217, 91%, 60%, 0.15);
+  margin: 0 auto 20px;
+}
+
+.onboard-check {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: hsla(142, 76%, 36%, 0.1);
+  border: 1px solid hsla(142, 76%, 36%, 0.15);
+  margin: 0 auto 20px;
+}
+
+/* ─── Progress ring ─── */
+.progress-ring {
+  width: 96px;
+  height: 96px;
+  position: relative;
+  margin: 0 auto 24px;
+}
+
+.progress-ring svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.progress-ring-value {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+}
+
+/* ─── Loading dots ─── */
+@keyframes dot {
+  0%, 80%, 100% { opacity: 0.15; transform: scale(0.7); }
+  40% { opacity: 1; transform: scale(1.2); }
+}
+
+.loading-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--blue);
+}
+
+/* ─── Ping animation ─── */
+@keyframes ping {
+  75%, 100% { transform: scale(2); opacity: 0; }
+}
+
+.ping {
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite;
+  opacity: 0.3;
+}
+
+/* ─── Utility helpers ─── */
+.text-muted { color: var(--muted); }
+.text-blue { color: var(--blue); }
+.text-green { color: var(--green); }
+.text-red { color: var(--red); }
+.text-center { text-align: center; }
+.text-left { text-align: left; }
+.font-mono { font-family: monospace; }
+.opacity-50 { opacity: 0.5; }
+.shrink-0 { flex-shrink: 0; }
+.overflow-y-auto { overflow-y: auto; }
+.cursor-pointer { cursor: pointer; }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }

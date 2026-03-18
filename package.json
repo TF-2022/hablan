@@ -1,7 +1,7 @@
 {
-  "name": "voiceforge",
-  "version": "0.2.1",
-  "description": "Open-source voice dictation app -speak, transcribe, paste at cursor",
+  "name": "cursorvoice",
+  "version": "1.0.6",
+  "description": "Open-source voice dictation app, speak, transcribe, paste at cursor",
   "main": "./dist/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -10,14 +10,26 @@
     "dist:win": "npm run build && electron-builder --win --publish never",
     "dist:mac": "npm run build && electron-builder --mac --publish never",
     "dist:all": "npm run build && electron-builder --win --mac --publish never",
-    "setup": "node scripts/download-binaries.mjs"
+    "setup": "node scripts/download-binaries.mjs",
+    "release": "npm version patch && git push origin main --tags",
+    "release:minor": "npm version minor && git push origin main --tags",
+    "release:major": "npm version major && git push origin main --tags",
+    "video:dev": "remotion studio remotion/index.ts",
+    "video:render": "remotion render remotion/index.ts DemoVideo out/demo.mp4"
   },
   "author": "Pierre",
   "license": "AGPL-3.0",
   "dependencies": {
     "@nut-tree-fork/nut-js": "^4.2.6",
+    "@remotion/cli": "^4.0.436",
+    "@remotion/google-fonts": "^4.0.436",
+    "@remotion/transitions": "^4.0.436",
+    "@tailwindcss/postcss": "^4.2.1",
     "electron-store": "^8.2.0",
-    "electron-updater": "^6.8.3"
+    "electron-updater": "^6.8.3",
+    "lucide-react": "^0.577.0",
+    "postcss": "^8.5.8",
+    "remotion": "^4.0.436"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.1",

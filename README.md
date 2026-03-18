@@ -1,4 +1,4 @@
-# VoiceForge
+# CursorVoice
 
 **Dictate text, it appears at your cursor.** Open-source desktop voice dictation app with local transcription via Whisper.
 
@@ -14,9 +14,9 @@
 
 | Platform | Download |
 |----------|----------|
-| **Windows** | [VoiceForge Setup](https://github.com/TF-2022/voiceforge/releases/latest) |
-| **macOS (Apple Silicon)** | [VoiceForge.dmg](https://github.com/TF-2022/voiceforge/releases/latest) |
-| **macOS (Intel)** | [VoiceForge.dmg](https://github.com/TF-2022/voiceforge/releases/latest) |
+| **Windows** | [CursorVoice Setup](https://github.com/TF-2022/cursorvoice/releases/latest) |
+| **macOS (Apple Silicon)** | [CursorVoice.dmg](https://github.com/TF-2022/cursorvoice/releases/latest) |
+| **macOS (Intel)** | [CursorVoice.dmg](https://github.com/TF-2022/cursorvoice/releases/latest) |
 
 ## Development
 
@@ -28,8 +28,8 @@
 ### Setup
 
 ```bash
-git clone https://github.com/TF-2022/voiceforge.git
-cd voiceforge
+git clone https://github.com/TF-2022/cursorvoice.git
+cd cursorvoice
 npm install
 npm run setup    # Downloads whisper.cpp + ffmpeg
 npm run dev      # Starts the app in dev mode

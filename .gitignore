@@ -8,5 +8,11 @@ resources/icons/icon.png
 *.log
 .env
 .env.local
+.claude
 CLAUDE.md
 docs/
+web/node_modules/
+web/.next/
+
+.vercel
+.env*.local

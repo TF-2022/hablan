@@ -1,4 +1,5 @@
-import { useWaveform } from "../hooks/useWaveform";
+import { useEffect, useRef } from "react";
+import { Square, Check } from "lucide-react";
 
 type Status = "idle" | "recording" | "transcribing" | "injecting" | "done" | "empty" | "error";
 
@@ -6,117 +7,183 @@ interface Props {
   status: Status;
   stream: MediaStream | null;
   onOpenSettings?: () => void;
+  onStop?: () => void;
 }
 
-export default function RecordingWindow({ status, stream, onOpenSettings }: Props) {
-  const canvasRef = useWaveform(stream);
+export default function RecordingWindow({ status, stream, onOpenSettings, onStop }: Props) {
   const isActive = status === "recording";
   const isProcessing = status === "transcribing" || status === "injecting";
+  const isDone = status === "done";
+  const isIdle = status === "idle";
+  const isEmpty = status === "empty";
+  const isError = status === "error";
 
   return (
-    <div className="w-screen h-screen bg-[#18181b] flex flex-col">
-      {/* Top accent bar */}
-      <div
-        className="h-[2px] shrink-0 transition-colors duration-500"
-        style={{
-          background: isActive
-            ? "#ef4444"
-            : isProcessing
-              ? "#3b82f6"
-              : status === "done"
-                ? "#22c55e"
-                : "#27272a",
-        }}
-      />
+    <div style={{
+      width: "100vw", height: "100vh",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      background: "transparent",
+    }}>
+      <div className="drag-region" style={{
+        display: "flex", alignItems: "center", justifyContent: "center",
+        height: 48,
+        padding: isActive ? "0 12px 0 16px" : "0 14px",
+        borderRadius: 24,
+        background: "hsla(240, 10%, 5%, 0.92)",
+        border: "1px solid hsla(240, 4%, 20%, 0.6)",
+        backdropFilter: "blur(20px)",
+        boxShadow: "0 4px 24px rgba(0,0,0,0.5)",
+        transition: "padding 0.3s ease, min-width 0.3s ease",
+        minWidth: isActive ? 180 : isDone ? 100 : isProcessing ? 110 : 48,
+        gap: 8,
+      }}>
 
-      {/* Header */}
-      <div className="drag-region flex items-center justify-between px-5 pt-3 pb-2 shrink-0">
-        <div className="flex items-center gap-2.5">
-          <StatusDot status={status} />
-          <span
-            className="text-[13px] font-semibold tracking-wide"
-            style={{ color: getColor(status) }}
-          >
-            {getLabel(status)}
-          </span>
-        </div>
-        {onOpenSettings && !isProcessing && (
-          <button
-            onClick={onOpenSettings}
-            className="no-drag w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 transition-colors"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#71717a" strokeWidth="1.5" strokeLinecap="round">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
+        {isIdle && (
+          <div style={{
+            width: 20, height: 20,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: "hsla(0,0%,100%,0.3)",
+          }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
+              <path d="M19 10v2a7 7 0 01-14 0v-2" />
             </svg>
-          </button>
-        )}
-      </div>
-
-      {/* Waveform / Status - takes remaining space */}
-      <div className="flex-1 mx-4 mb-2 rounded-lg overflow-hidden" style={{ background: "#1f1f23" }}>
-        {isActive ? (
-          <canvas ref={canvasRef} className="block w-full h-full" />
-        ) : isProcessing ? (
-          <div className="w-full h-full flex items-center justify-center gap-3">
-            <LoadingDots />
-            <span className="text-xs text-zinc-500">Analyse en cours...</span>
-          </div>
-        ) : status === "done" ? (
-          <div className="w-full h-full flex items-center justify-center gap-2">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round"><path d="M5 13l4 4L19 7" /></svg>
-            <span className="text-sm font-medium text-emerald-500">Texte collé</span>
-          </div>
-        ) : status === "empty" ? (
-          <div className="w-full h-full flex items-center justify-center">
-            <span className="text-xs text-zinc-600">Aucune parole détectée</span>
-          </div>
-        ) : status === "error" ? (
-          <div className="w-full h-full flex items-center justify-center">
-            <span className="text-xs text-red-500/70">Erreur - réessayez</span>
-          </div>
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <span className="text-xs text-zinc-600">Ctrl+Shift+H pour dicter</span>
           </div>
         )}
-      </div>
 
-      {/* Footer hint during recording */}
-      {isActive && (
-        <div className="text-center pb-2 shrink-0">
-          <span className="text-[10px] text-zinc-600">Ctrl+Shift+H pour arrêter</span>
-        </div>
-      )}
+        {isActive && (
+          <>
+            <LiveWaveform stream={stream} />
+            <button
+              className="no-drag"
+              onClick={onStop}
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "center",
+                width: 28, height: 28, borderRadius: 14,
+                background: "hsla(0, 0%, 100%, 0.1)",
+                border: "none", color: "hsla(0,0%,100%,0.6)",
+                cursor: "pointer", padding: 0, flexShrink: 0,
+                transition: "all 0.15s",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "hsla(0, 0%, 100%, 0.2)";
+                e.currentTarget.style.color = "white";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "hsla(0, 0%, 100%, 0.1)";
+                e.currentTarget.style.color = "hsla(0,0%,100%,0.6)";
+              }}
+            >
+              <Square size={10} fill="currentColor" />
+            </button>
+          </>
+        )}
+
+        {isProcessing && (
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            {[0, 1, 2].map((i) => (
+              <div key={i} style={{
+                width: 5, height: 5, borderRadius: "50%", background: "white",
+                animation: `dot 1.2s ease ${i * 0.15}s infinite`,
+              }} />
+            ))}
+          </div>
+        )}
+
+        {isDone && (
+          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <Check size={14} style={{ color: "var(--green)" }} />
+            <span style={{ fontSize: 11, fontWeight: 500, color: "var(--green)" }}>Collé</span>
+          </div>
+        )}
+
+        {isEmpty && <span style={{ fontSize: 10, color: "hsla(0,0%,100%,0.35)" }}>Vide</span>}
+
+        {isError && <span style={{ fontSize: 10, color: "var(--red)" }}>Erreur</span>}
+      </div>
     </div>
   );
 }
 
-function getColor(s: Status) {
-  return { idle: "#52525b", recording: "#ef4444", transcribing: "#60a5fa", injecting: "#60a5fa", done: "#22c55e", empty: "#52525b", error: "#ef4444" }[s];
-}
+function LiveWaveform({ stream }: { stream: MediaStream | null }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animRef = useRef<number>(0);
 
-function getLabel(s: Status) {
-  return { idle: "VoiceForge", recording: "Enregistrement", transcribing: "Transcription...", injecting: "Insertion...", done: "Terminé", empty: "Vide", error: "Erreur" }[s];
-}
+  useEffect(() => {
+    if (!stream || !canvasRef.current) return;
 
-function StatusDot({ status }: { status: Status }) {
-  const color = getColor(status);
+    const audioCtx = new AudioContext();
+    const source = audioCtx.createMediaStreamSource(stream);
+    const analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 128;
+    analyser.smoothingTimeConstant = 0.8;
+    source.connect(analyser);
+
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d")!;
+
+    const barCount = 16;
+    const smoothBars = new Float32Array(barCount).fill(0);
+    const dpr = window.devicePixelRatio || 1;
+
+    function resize() {
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.scale(dpr, dpr);
+    }
+    resize();
+
+    const draw = () => {
+      animRef.current = requestAnimationFrame(draw);
+      analyser.getByteFrequencyData(dataArray);
+
+      const w = canvas.getBoundingClientRect().width;
+      const h = canvas.getBoundingClientRect().height;
+      const cy = h / 2;
+
+      ctx.clearRect(0, 0, w * dpr, h * dpr);
+
+      const barW = 3.5;
+      const gap = 2.5;
+      const totalW = barCount * (barW + gap) - gap;
+      const startX = (w - totalW) / 2;
+
+      for (let i = 0; i < barCount; i++) {
+        const freqIdx = Math.floor((i / barCount) * bufferLength * 0.5 + bufferLength * 0.05);
+        const raw = dataArray[freqIdx] / 255;
+
+        smoothBars[i] += (raw - smoothBars[i]) * 0.28;
+        const val = smoothBars[i];
+
+        const maxH = h * 0.9;
+        const minH = 4;
+        const barH = Math.max(minH, val * maxH);
+
+        const x = startX + i * (barW + gap);
+        const y = cy - barH / 2;
+
+        ctx.fillStyle = `rgba(255, 255, 255, ${0.7 + val * 0.3})`;
+        ctx.beginPath();
+        ctx.roundRect(x, y, barW, barH, 1.5);
+        ctx.fill();
+      }
+    };
+
+    draw();
+
+    return () => {
+      cancelAnimationFrame(animRef.current);
+      audioCtx.close();
+    };
+  }, [stream]);
+
   return (
-    <div className="relative w-2 h-2">
-      {status === "recording" && <div className="absolute inset-[-3px] rounded-full animate-ping opacity-30" style={{ background: color }} />}
-      <div className="w-full h-full rounded-full" style={{ background: color }} />
-    </div>
-  );
-}
-
-function LoadingDots() {
-  return (
-    <div className="flex gap-1">
-      {[0, 1, 2].map((i) => (
-        <div key={i} className="w-1.5 h-1.5 rounded-full bg-blue-400" style={{ animation: `dot 1.2s ease ${i * 0.15}s infinite` }} />
-      ))}
-      <style>{`@keyframes dot { 0%,80%,100% { opacity:.15; transform:scale(.7) } 40% { opacity:1; transform:scale(1.2) } }`}</style>
-    </div>
+    <canvas
+      ref={canvasRef}
+      style={{ width: 120, height: 32, display: "block" }}
+    />
   );
 }

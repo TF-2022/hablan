@@ -1,300 +1,202 @@
 import { useState, useEffect } from "react";
-import { api } from "../lib/ipc";
+import { Mic, Keyboard, Clipboard, Check, AlertCircle } from "lucide-react";
+import { api, ModelProgress } from "../lib/ipc";
 
 interface Props {
   onComplete: () => void;
+  onMount?: () => void;
 }
 
-type Step = "welcome" | "model" | "downloading" | "test" | "ready";
+type Step = "welcome" | "model" | "downloading" | "ready";
 
-const MODELS = [
-  {
-    id: "tiny",
-    label: "Rapide",
-    desc: "Transcription basique, très rapide",
-    size: "75 Mo",
-    speed: "~0.3s",
-    recommended: false,
-  },
-  {
-    id: "base",
-    label: "Équilibré",
-    desc: "Bon compromis vitesse/qualité",
-    size: "142 Mo",
-    speed: "~0.6s",
-    recommended: false,
-  },
-  {
-    id: "small",
-    label: "Précis",
-    desc: "Très bonne qualité, recommandé",
-    size: "466 Mo",
-    speed: "~2s",
-    recommended: true,
-  },
-];
+interface ModelInfo {
+  id: string;
+  label: string;
+  desc: string;
+  size: string;
+  speedLabel: string;
+  recommended: boolean;
+  downloaded: boolean;
+}
 
-export default function OnboardingScreen({ onComplete }: Props) {
+export default function OnboardingScreen({ onComplete, onMount }: Props) {
   const [step, setStep] = useState<Step>("welcome");
-  const [selectedModel, setSelectedModel] = useState("small");
-  const [downloadProgress, setDownloadProgress] = useState(0);
-  const [downloadSpeed, setDownloadSpeed] = useState("");
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [selectedModel, setSelectedModel] = useState("");
+
+  useEffect(() => { onMount?.(); }, []);
+
+  useEffect(() => {
+    api?.listModels().then((m) => {
+      const list = m as ModelInfo[];
+      setModels(list);
+      const rec = list.find((x) => x.recommended);
+      setSelectedModel(rec?.id || list[0]?.id || "");
+    });
+  }, []);
 
   return (
-    <div className="w-screen h-screen flex items-center justify-center">
-      <div
-        className="w-[420px] rounded-[24px] overflow-hidden"
-        style={{
-          background: "linear-gradient(165deg, rgba(16,16,20,0.98), rgba(24,24,30,0.98))",
-          boxShadow: "0 32px 64px rgba(0,0,0,0.6), 0 0 0 0.5px rgba(255,255,255,0.06) inset",
-        }}
-      >
-        {step === "welcome" && (
-          <WelcomeStep onNext={() => setStep("model")} />
-        )}
-        {step === "model" && (
-          <ModelStep
-            selected={selectedModel}
-            onSelect={setSelectedModel}
-            onNext={() => setStep("downloading")}
-          />
-        )}
-        {step === "downloading" && (
-          <DownloadStep
-            model={selectedModel}
-            progress={downloadProgress}
-            speed={downloadSpeed}
-            onComplete={() => setStep("ready")}
-          />
-        )}
-        {step === "ready" && (
-          <ReadyStep onComplete={onComplete} />
-        )}
-      </div>
+    <div className="screen">
+      {step === "welcome" && <WelcomeStep onNext={() => setStep("model")} />}
+      {step === "model" && models.length > 0 && (
+        <ModelStep models={models} selected={selectedModel} onSelect={setSelectedModel} onNext={() => setStep("downloading")} />
+      )}
+      {step === "downloading" && <DownloadStep model={selectedModel} onComplete={() => setStep("ready")} onBack={() => setStep("model")} />}
+      {step === "ready" && <ReadyStep onComplete={onComplete} />}
     </div>
   );
 }
 
 function WelcomeStep({ onNext }: { onNext: () => void }) {
   return (
-    <div className="px-8 py-10 text-center">
-      {/* Logo */}
-      <div className="w-16 h-16 mx-auto mb-6 rounded-2xl flex items-center justify-center"
-        style={{ background: "linear-gradient(135deg, #3b82f6, #8b5cf6)" }}
-      >
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round">
-          <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
-          <path d="M19 10v2a7 7 0 01-14 0v-2" />
-          <line x1="12" y1="19" x2="12" y2="23" />
-          <line x1="8" y1="23" x2="16" y2="23" />
-        </svg>
-      </div>
+    <>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 32px 24px", textAlign: "center" }}>
+        <div className="onboard-logo">
+          <Mic size={26} style={{ color: "var(--blue)" }} />
+        </div>
 
-      <h1 className="text-[22px] font-bold text-white mb-2">
-        Bienvenue sur VoiceForge
-      </h1>
-      <p className="text-[14px] leading-relaxed mb-8" style={{ color: "rgba(255,255,255,0.45)" }}>
-        Dictez du texte et injectez-le directement là où se trouve votre curseur. Partout, dans n'importe quelle application.
-      </p>
+        <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Bienvenue sur CursorVoice</h1>
+        <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.6, marginBottom: 28, maxWidth: 280 }}>
+          Dictez du texte, il apparaît directement à votre curseur. Dans n'importe quelle app.
+        </p>
 
-      <div className="space-y-3 text-left mb-8">
-        <Feature icon="⌨️" title="Raccourci global" desc="Ctrl+Shift+H depuis n'importe quelle app" />
-        <Feature icon="🎤" title="Transcription locale" desc="100% hors-ligne, rien n'est envoyé" />
-        <Feature icon="📋" title="Coller automatique" desc="Le texte apparaît à votre curseur" />
-      </div>
-
-      <PrimaryButton onClick={onNext}>Commencer la configuration</PrimaryButton>
-    </div>
-  );
-}
-
-function ModelStep({
-  selected,
-  onSelect,
-  onNext,
-}: {
-  selected: string;
-  onSelect: (id: string) => void;
-  onNext: () => void;
-}) {
-  return (
-    <div className="px-8 py-8">
-      <h2 className="text-[18px] font-bold text-white mb-1">Choisir le modèle</h2>
-      <p className="text-[13px] mb-6" style={{ color: "rgba(255,255,255,0.35)" }}>
-        Le modèle sera téléchargé une seule fois et utilisé localement.
-      </p>
-
-      <div className="space-y-2 mb-8">
-        {MODELS.map((m) => (
-          <button
-            key={m.id}
-            onClick={() => onSelect(m.id)}
-            className="w-full text-left px-4 py-3.5 rounded-2xl transition-all relative"
-            style={{
-              background: selected === m.id
-                ? "rgba(96,165,250,0.08)"
-                : "rgba(255,255,255,0.02)",
-              border: selected === m.id
-                ? "1px solid rgba(96,165,250,0.2)"
-                : "1px solid rgba(255,255,255,0.04)",
-            }}
-          >
-            {m.recommended && (
-              <span
-                className="absolute top-3 right-3 text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full"
-                style={{ background: "rgba(96,165,250,0.15)", color: "#60a5fa" }}
-              >
-                Recommandé
-              </span>
-            )}
-            <div className="flex items-baseline gap-2 mb-1">
-              <span
-                className="text-[14px] font-semibold"
-                style={{ color: selected === m.id ? "#60a5fa" : "rgba(255,255,255,0.8)" }}
-              >
-                {m.label}
-              </span>
-              <span className="text-[11px]" style={{ color: "rgba(255,255,255,0.2)" }}>
-                {m.size} · {m.speed}
-              </span>
-            </div>
-            <p className="text-[12px]" style={{ color: "rgba(255,255,255,0.3)" }}>
-              {m.desc}
-            </p>
-          </button>
-        ))}
-      </div>
-
-      <PrimaryButton onClick={onNext}>Télécharger et installer</PrimaryButton>
-    </div>
-  );
-}
-
-function DownloadStep({
-  model,
-  progress,
-  speed,
-  onComplete,
-}: {
-  model: string;
-  progress: number;
-  speed: string;
-  onComplete: () => void;
-}) {
-  const [pct, setPct] = useState(0);
-  const [status, setStatus] = useState("Préparation...");
-
-  useEffect(() => {
-    // Simulate progress since we don't have real download IPC yet
-    // In production, this would use api.downloadModel() with progress events
-    let interval: NodeJS.Timeout;
-    const fakeDownload = () => {
-      setPct(0);
-      setStatus("Téléchargement du modèle...");
-      interval = setInterval(() => {
-        setPct((prev) => {
-          if (prev >= 100) {
-            clearInterval(interval);
-            setStatus("Installation terminée");
-            setTimeout(onComplete, 800);
-            return 100;
-          }
-          return prev + Math.random() * 3 + 1;
-        });
-      }, 150);
-    };
-    fakeDownload();
-    return () => clearInterval(interval);
-  }, [model, onComplete]);
-
-  const displayPct = Math.min(100, Math.round(pct));
-
-  return (
-    <div className="px-8 py-10 text-center">
-      {/* Animated circle */}
-      <div className="w-24 h-24 mx-auto mb-6 relative">
-        <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-          <circle
-            cx="50" cy="50" r="42"
-            fill="none"
-            stroke="rgba(255,255,255,0.05)"
-            strokeWidth="4"
-          />
-          <circle
-            cx="50" cy="50" r="42"
-            fill="none"
-            stroke="#3b82f6"
-            strokeWidth="4"
-            strokeLinecap="round"
-            strokeDasharray={`${displayPct * 2.64} ${264 - displayPct * 2.64}`}
-            className="transition-all duration-300"
-          />
-        </svg>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-[20px] font-bold tabular-nums text-white">
-            {displayPct}%
-          </span>
+        <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 8, textAlign: "left" }}>
+          <div className="feature-row">
+            <div className="feature-icon"><Keyboard size={16} /></div>
+            <div><div className="feature-title">Raccourci global</div><div className="feature-desc">Ctrl+Shift+H depuis n'importe quelle app</div></div>
+          </div>
+          <div className="feature-row">
+            <div className="feature-icon"><Mic size={16} /></div>
+            <div><div className="feature-title">Transcription locale</div><div className="feature-desc">100% hors-ligne, rien n'est envoyé</div></div>
+          </div>
+          <div className="feature-row">
+            <div className="feature-icon"><Clipboard size={16} /></div>
+            <div><div className="feature-title">Collage automatique</div><div className="feature-desc">Le texte apparaît à votre curseur</div></div>
+          </div>
         </div>
       </div>
 
-      <h2 className="text-[16px] font-semibold text-white mb-1">{status}</h2>
-      <p className="text-[12px]" style={{ color: "rgba(255,255,255,0.25)" }}>
-        Modèle {model} · Cette opération est unique
-      </p>
+      <div style={{ padding: "0 32px 32px" }}>
+        <button className="btn-primary" onClick={onNext}>Commencer la configuration</button>
+      </div>
+    </>
+  );
+}
+
+function ModelStep({ models, selected, onSelect, onNext }: { models: ModelInfo[]; selected: string; onSelect: (id: string) => void; onNext: () => void }) {
+  return (
+    <>
+      <div style={{ flex: 1, padding: "32px 32px 24px" }}>
+        <h2 style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>Choisir le modèle</h2>
+        <p style={{ fontSize: 13, color: "var(--muted)", marginBottom: 24 }}>Téléchargé une seule fois, utilisé localement.</p>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {models.map((m) => {
+            const active = selected === m.id;
+            return (
+              <button key={m.id} className={`select-btn ${active ? "active" : ""}`} onClick={() => onSelect(m.id)}>
+                <div>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 2 }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: active ? "var(--blue)" : "var(--fg)" }}>{m.label}</span>
+                    <span style={{ fontSize: 11, color: "var(--muted)" }}>{m.size}</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--muted)" }}>{m.desc}</div>
+                </div>
+                {m.recommended && <span className="badge" style={{ marginLeft: 12 }}>Recommandé</span>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={{ padding: "0 32px 32px" }}>
+        <button className="btn-primary" onClick={onNext}>Télécharger et installer</button>
+      </div>
+    </>
+  );
+}
+
+function DownloadStep({ model, onComplete, onBack }: { model: string; onComplete: () => void; onBack: () => void }) {
+  const [pct, setPct] = useState(0);
+  const [status, setStatus] = useState("Préparation...");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cleanup: (() => void) | undefined;
+
+    async function startDownload() {
+      cleanup = api?.onModelProgress((data: ModelProgress) => {
+        if (data.total > 0) {
+          setPct(Math.round((data.downloaded / data.total) * 100));
+          setStatus("Téléchargement du modèle...");
+        }
+      });
+
+      const result = await api?.downloadModel(model);
+
+      if (result?.success) {
+        setPct(100);
+        setStatus("Installation terminée");
+        await api?.switchModel(model);
+        setTimeout(onComplete, 600);
+      } else {
+        setError(result?.error || "Échec du téléchargement");
+      }
+    }
+
+    startDownload();
+    return () => cleanup?.();
+  }, [model, onComplete]);
+
+  const d = Math.min(100, pct);
+
+  if (error) {
+    return (
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, textAlign: "center" }}>
+        <div style={{ width: 56, height: 56, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: "hsla(0, 84%, 60%, 0.1)", border: "1px solid hsla(0, 84%, 60%, 0.15)", marginBottom: 20 }}>
+          <AlertCircle size={26} style={{ color: "var(--red)" }} />
+        </div>
+        <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Erreur de téléchargement</h2>
+        <p style={{ fontSize: 12, color: "var(--muted)", marginBottom: 24 }}>{error}</p>
+        <button className="btn-primary" onClick={onBack}>Réessayer</button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, textAlign: "center" }}>
+      <div className="progress-ring">
+        <svg viewBox="0 0 100 100">
+          <circle cx="50" cy="50" r="42" fill="none" stroke="var(--border)" strokeWidth="3" />
+          <circle cx="50" cy="50" r="42" fill="none" stroke="var(--blue)" strokeWidth="3" strokeLinecap="round"
+            strokeDasharray={`${d * 2.64} ${264 - d * 2.64}`} style={{ transition: "stroke-dasharray 0.3s" }} />
+        </svg>
+        <div className="progress-ring-value">{d}%</div>
+      </div>
+      <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>{status}</h2>
+      <p style={{ fontSize: 12, color: "var(--muted)" }}>Cette opération est unique</p>
     </div>
   );
 }
 
 function ReadyStep({ onComplete }: { onComplete: () => void }) {
   return (
-    <div className="px-8 py-10 text-center">
-      <div
-        className="w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center"
-        style={{ background: "rgba(34,197,94,0.1)" }}
-      >
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M5 13l4 4L19 7" />
-        </svg>
+    <>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 32px 24px", textAlign: "center" }}>
+        <div className="onboard-check">
+          <Check size={26} style={{ color: "var(--green)" }} />
+        </div>
+
+        <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>Tout est prêt !</h2>
+        <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.6, maxWidth: 280 }}>
+          CursorVoice fonctionne dans votre barre système.
+          Utilisez <kbd>Ctrl+Shift+H</kbd> pour dicter.
+        </p>
       </div>
 
-      <h2 className="text-[20px] font-bold text-white mb-2">Tout est prêt !</h2>
-      <p className="text-[14px] leading-relaxed mb-8" style={{ color: "rgba(255,255,255,0.4)" }}>
-        VoiceForge est installé et fonctionne dans votre barre système.
-        Utilisez <span className="font-mono text-white/60">Ctrl+Shift+H</span> pour dicter.
-      </p>
-
-      <PrimaryButton onClick={onComplete}>C'est parti</PrimaryButton>
-    </div>
-  );
-}
-
-// --- Shared components ---
-
-function Feature({ icon, title, desc }: { icon: string; title: string; desc: string }) {
-  return (
-    <div className="flex items-start gap-3 px-3 py-2 rounded-xl" style={{ background: "rgba(255,255,255,0.02)" }}>
-      <span className="text-[18px] mt-0.5">{icon}</span>
-      <div>
-        <div className="text-[13px] font-medium text-white">{title}</div>
-        <div className="text-[12px]" style={{ color: "rgba(255,255,255,0.3)" }}>{desc}</div>
+      <div style={{ padding: "0 32px 32px" }}>
+        <button className="btn-primary" onClick={onComplete}>C'est parti</button>
       </div>
-    </div>
-  );
-}
-
-function PrimaryButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      onClick={onClick}
-      className="w-full py-3 rounded-2xl text-[14px] font-semibold text-white transition-all active:scale-[0.98]"
-      style={{
-        background: "linear-gradient(135deg, #3b82f6, #6366f1)",
-        boxShadow: "0 4px 16px rgba(59,130,246,0.25)",
-      }}
-      onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 6px 24px rgba(59,130,246,0.35)")}
-      onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "0 4px 16px rgba(59,130,246,0.25)")}
-    >
-      {children}
-    </button>
+    </>
   );
 }
