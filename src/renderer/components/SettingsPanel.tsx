@@ -33,11 +33,15 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [downloading, setDownloading] = useState<string | null>(null);
   const [downloadPct, setDownloadPct] = useState(0);
   const [appVersion, setAppVersion] = useState("");
+  const [updateStatus, setUpdateStatus] = useState<{ status: string; version: string }>({ status: "up-to-date", version: "" });
 
   useEffect(() => {
     api?.getSettings().then((s) => setSettings(s as Settings));
     api?.listModels().then((m) => setModels(m as ModelInfo[]));
     api?.getAppStatus().then((s) => setAppVersion((s as any).version || ""));
+    api?.getUpdateStatus().then(setUpdateStatus);
+    const cleanup = api?.onUpdateStatus(setUpdateStatus);
+    return () => cleanup?.();
   }, []);
 
   useEffect(() => {
@@ -160,8 +164,23 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
         </div>
       </div>
 
-      <div style={{ padding: "10px 16px", textAlign: "center", borderTop: "1px solid var(--border)", flexShrink: 0 }}>
+      <div style={{ padding: "10px 16px", borderTop: "1px solid var(--border)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <span style={{ fontSize: 11, color: "var(--muted)", opacity: 0.5 }}>CursorVoice {appVersion ? `v${appVersion}` : ""}</span>
+        {updateStatus.status === "up-to-date" && (
+          <span style={{ fontSize: 10, color: "var(--green)", opacity: 0.7 }}>✓ À jour</span>
+        )}
+        {updateStatus.status === "downloading" && (
+          <span style={{ fontSize: 10, color: "var(--blue)" }}>↓ v{updateStatus.version}...</span>
+        )}
+        {updateStatus.status === "ready" && (
+          <button
+            className="select-btn"
+            onClick={() => api?.installUpdate()}
+            style={{ padding: "4px 10px", fontSize: 10, color: "var(--blue)", border: "1px solid var(--blue)", borderRadius: 6, background: "transparent", cursor: "pointer" }}
+          >
+            Installer v{updateStatus.version}
+          </button>
+        )}
       </div>
     </div>
   );

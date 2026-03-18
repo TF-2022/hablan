@@ -382,11 +382,20 @@ app.whenReady().then(async () => {
     }
   }
 
+  let updateStatus = "up-to-date";
+  let updateVersion = "";
+
+  ipcMain.handle("update:status", () => ({ status: updateStatus, version: updateVersion }));
+  ipcMain.handle("update:install", () => { autoUpdater.quitAndInstall(); });
+
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.logger = null;
 
   autoUpdater.on("update-available", (info) => {
+    updateStatus = "downloading";
+    updateVersion = info.version;
+    send("update:status", { status: updateStatus, version: updateVersion });
     new Notification({
       title: "CursorVoice - Mise à jour disponible",
       body: `Version ${info.version} en cours de téléchargement...`,
@@ -394,6 +403,9 @@ app.whenReady().then(async () => {
   });
 
   autoUpdater.on("update-downloaded", (info) => {
+    updateStatus = "ready";
+    updateVersion = info.version;
+    send("update:status", { status: updateStatus, version: updateVersion });
     new Notification({
       title: "CursorVoice - Mise à jour prête",
       body: `Version ${info.version} sera installée au prochain redémarrage.`,

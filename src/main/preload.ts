@@ -40,6 +40,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
     return () => ipcRenderer.removeAllListeners("model:progress");
   },
 
+  getUpdateStatus: () => ipcRenderer.invoke("update:status"),
+  installUpdate: () => ipcRenderer.invoke("update:install"),
+  onUpdateStatus: (cb: (data: any) => void) => {
+    ipcRenderer.on("update:status", (_event, data) => cb(data));
+    return () => ipcRenderer.removeAllListeners("update:status");
+  },
+
   resizeWindow: (width: number, height: number) =>
     ipcRenderer.invoke("window:resize", width, height),
   centerWindow: () => ipcRenderer.invoke("window:center"),

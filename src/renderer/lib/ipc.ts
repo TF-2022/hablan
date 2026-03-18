@@ -27,6 +27,9 @@ export interface ElectronAPI {
   listModels: () => Promise<unknown[]>;
   downloadModel: (name: string) => Promise<{ success: boolean; error?: string }>;
   switchModel: (name: string) => Promise<{ success: boolean; error?: string }>;
+  getUpdateStatus: () => Promise<{ status: string; version: string }>;
+  installUpdate: () => Promise<void>;
+  onUpdateStatus: (cb: (data: { status: string; version: string }) => void) => () => void;
   resizeWindow: (width: number, height: number) => Promise<void>;
   centerWindow: () => Promise<void>;
   hideWindow: () => Promise<void>;
