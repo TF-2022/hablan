@@ -69,7 +69,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Publish draft release
-        run: gh release edit "${{ github.ref_name }}" --draft=false --latest
+      - name: Publish release
+        run: |
+          # Try to publish existing draft, or create a new release if none exists
+          gh release edit "${{ github.ref_name }}" --draft=false --latest 2>/dev/null \
+            || gh release create "${{ github.ref_name }}" --title "${{ github.ref_name }}" --generate-notes --latest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
