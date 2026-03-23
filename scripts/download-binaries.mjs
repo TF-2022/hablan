@@ -45,7 +45,7 @@ if (PLATFORM === "win") {
   const whisperUrl = "https://github.com/ggml-org/whisper.cpp/releases/latest/download/whisper-bin-x64.zip";
   const whisperZip = path.join(BIN_DIR, "whisper.zip");
 
-  if (!fs.existsSync(path.join(BIN_DIR, "main.exe"))) {
+  if (!fs.existsSync(path.join(BIN_DIR, "whisper-cli.exe"))) {
     console.log("📥 whisper.cpp (Windows x64)");
     await download(whisperUrl, whisperZip);
     console.log("  Extracting...");
@@ -98,7 +98,7 @@ if (PLATFORM === "win") {
   console.log("📋 macOS: Install via Homebrew");
   console.log("  brew install whisper-cpp ffmpeg");
   console.log("  Then copy binaries:");
-  console.log(`  cp $(which whisper-cpp) ${BIN_DIR}/main`);
+  console.log(`  cp $(which whisper-cpp) ${BIN_DIR}/whisper-cli`);
   console.log(`  cp $(which ffmpeg) ${BIN_DIR}/ffmpeg`);
   console.log("");
 
@@ -108,9 +108,9 @@ if (PLATFORM === "win") {
     const ffmpegPath = execSync("which ffmpeg 2>/dev/null || echo ''").toString().trim();
 
     if (whisperPath) {
-      fs.copyFileSync(whisperPath, path.join(BIN_DIR, "main"));
-      fs.chmodSync(path.join(BIN_DIR, "main"), 0o755);
-      console.log("  ✅ whisper-cpp copied from Homebrew");
+      fs.copyFileSync(whisperPath, path.join(BIN_DIR, "whisper-cli"));
+      fs.chmodSync(path.join(BIN_DIR, "whisper-cli"), 0o755);
+      console.log("  ✅ whisper-cpp copied from Homebrew as whisper-cli");
     }
     if (ffmpegPath) {
       fs.copyFileSync(ffmpegPath, path.join(BIN_DIR, "ffmpeg"));

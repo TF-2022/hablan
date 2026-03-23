@@ -1,14 +1,22 @@
 process.noDeprecation = true;
 import { app, BrowserWindow, globalShortcut, ipcMain, clipboard, Notification } from "electron";
-import { appendFileSync } from "node:fs";
+import fs, { appendFileSync } from "node:fs";
+import path from "node:path";
+import { autoUpdater } from "electron-updater";
+import { setupTray } from "./tray";
+import { getConfig, config } from "./config";
+import { convertToWav } from "./audio-converter";
+import { transcribe, startWhisperServer, stopWhisperServer, restartWithModel } from "./transcriber";
+import { injectText } from "./injector";
+import { MODELS, getActiveModelPath, isAnyModelDownloaded, isModelDownloaded, downloadModel } from "./model-manager";
+import { getWhisperPath, getWhisperServerPath, getFfmpegPath } from "./bin-resolver";
 
-const LOG_PATH = require("path").join(app.getPath("userData"), "cursorvoice.log");
+const LOG_PATH = path.join(app.getPath("userData"), "cursorvoice.log");
 const MAX_LOG_SIZE = 500 * 1024; // 500KB max
 
 function log(msg: string) {
   const line = `[${new Date().toISOString()}] ${msg}\n`;
   try {
-    // Rotate: if log > 500KB, keep last half
     const stats = fs.statSync(LOG_PATH).size;
     if (stats > MAX_LOG_SIZE) {
       const content = fs.readFileSync(LOG_PATH, "utf8");
@@ -30,16 +38,6 @@ app.on("second-instance", () => {
   }
 });
 app.commandLine.appendSwitch("disable-gpu-cache");
-import path from "node:path";
-import fs from "node:fs";
-import { autoUpdater } from "electron-updater";
-import { setupTray } from "./tray";
-import { getConfig, config } from "./config";
-import { convertToWav } from "./audio-converter";
-import { transcribe, startWhisperServer, stopWhisperServer, restartWithModel } from "./transcriber";
-import { injectText } from "./injector";
-import { MODELS, getActiveModelPath, isAnyModelDownloaded, isModelDownloaded, downloadModel } from "./model-manager";
-import { getWhisperPath, getWhisperServerPath, getFfmpegPath } from "./bin-resolver";
 
 let recordingWindow: BrowserWindow | null = null;
 let isRecording = false;

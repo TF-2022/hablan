@@ -36,6 +36,7 @@
   "mac": {
     "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }],
     "category": "public.app-category.productivity",
+    "identity": "-",
     "entitlements": "build/entitlements.mac.plist",
     "entitlementsInherit": "build/entitlements.mac.plist",
     "extendInfo": {

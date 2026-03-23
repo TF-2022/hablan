@@ -114,6 +114,7 @@ jobs:
         run: npm run build && npx electron-builder --mac --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
 
   publish-release:
     needs: [version-and-tag, build-windows, build-macos]

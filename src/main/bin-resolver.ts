@@ -3,6 +3,9 @@ import fs from "node:fs";
 import { app } from "electron";
 
 function getBaseBinPath(): string {
+  if (process.platform === "linux") {
+    throw new Error("Linux is not supported yet. CursorVoice runs on Windows and macOS.");
+  }
   const platform = process.platform === "darwin" ? "mac" : "win";
 
   if (app.isPackaged) {
