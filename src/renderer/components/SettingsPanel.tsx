@@ -145,8 +145,8 @@ const NAV_ITEMS: { id: Section; label: string; icon: typeof Keyboard }[] = [
   { id: "about", label: "À propos", icon: Info },
 ];
 
-export default function SettingsPanel({ onClose, onDeviceChange, onSilenceTimeoutChange }: { onClose: () => void; onDeviceChange?: (id: string) => void; onSilenceTimeoutChange?: (v: number) => void }) {
-  const [section, setSection] = useState<Section>("general");
+export default function SettingsPanel({ onClose, onDeviceChange, onSilenceTimeoutChange, initialSection }: { onClose: () => void; onDeviceChange?: (id: string) => void; onSilenceTimeoutChange?: (v: number) => void; initialSection?: string }) {
+  const [section, setSection] = useState<Section>((initialSection as Section) || "general");
   const [settings, setSettings] = useState<Settings | null>(null);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [downloading, setDownloading] = useState<string | null>(null);

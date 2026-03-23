@@ -20,6 +20,7 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [inputDevice, setInputDevice] = useState<string>("default");
   const [silenceTimeout, setSilenceTimeout] = useState(0);
+  const [initialSection, setInitialSection] = useState<string | undefined>();
   const { stream, startRecording, stopRecording, cancelRecording } = useAudioRecorder({ deviceId: inputDevice, silenceTimeout });
 
   // Refs to avoid stale closures in IPC callbacks
@@ -33,6 +34,7 @@ export default function App() {
       setStatus("transcribing");
       stopRecording();
     }
+    setInitialSection(undefined);
     setView("settings");
     api?.resizeWindow(SETTINGS_SIZE.w, SETTINGS_SIZE.h);
     api?.centerWindow();
@@ -111,8 +113,10 @@ export default function App() {
       <OnboardingScreen
         onComplete={() => {
           api?.completeOnboarding();
-          setView("recording");
-          api?.hideWindow();
+          setView("settings");
+          setInitialSection("howto");
+          api?.resizeWindow(SETTINGS_SIZE.w, SETTINGS_SIZE.h);
+          api?.centerWindow();
         }}
         onMount={() => {
           api?.resizeWindow(ONBOARDING_SIZE.w, ONBOARDING_SIZE.h);
@@ -123,7 +127,7 @@ export default function App() {
   }
 
   if (view === "settings") {
-    return <SettingsPanel onClose={closeSettings} onDeviceChange={setInputDevice} onSilenceTimeoutChange={setSilenceTimeout} />;
+    return <SettingsPanel onClose={closeSettings} onDeviceChange={setInputDevice} onSilenceTimeoutChange={setSilenceTimeout} initialSection={initialSection} />;
   }
 
   return (
