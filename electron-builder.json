@@ -34,7 +34,7 @@
     "artifactName": "CursorVoice-Setup-${version}.${ext}"
   },
   "mac": {
-    "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }],
+    "target": [{ "target": "dmg", "arch": ["arm64"] }],
     "category": "public.app-category.productivity",
     "identity": "-",
     "entitlements": "build/entitlements.mac.plist",

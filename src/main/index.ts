@@ -200,11 +200,13 @@ app.whenReady().then(async () => {
     }
   });
 
-  // Sync auto-start with OS login items
-  app.setLoginItemSettings({
-    openAtLogin: getConfig("launchAtStartup"),
-    openAsHidden: true,
-  });
+  // Sync auto-start with OS login items (skip in dev to avoid registering electron.exe)
+  if (app.isPackaged) {
+    app.setLoginItemSettings({
+      openAtLogin: getConfig("launchAtStartup"),
+      openAsHidden: true,
+    });
+  }
 
   // Register global hotkey
   globalShortcut.unregisterAll();
@@ -311,7 +313,7 @@ app.whenReady().then(async () => {
       globalShortcut.unregisterAll();
       globalShortcut.register(value, handleHotkey);
     }
-    if (key === "launchAtStartup") {
+    if (key === "launchAtStartup" && app.isPackaged) {
       app.setLoginItemSettings({ openAtLogin: value as boolean, openAsHidden: true });
     }
   });

@@ -102,16 +102,49 @@ jobs:
       - name: Generate icons
         run: node scripts/generate-icons.mjs
 
-      - name: Download whisper.cpp + ffmpeg
+      - name: Build whisper.cpp (static) + download ffmpeg (static)
         run: |
-          brew install whisper-cpp ffmpeg
           mkdir -p resources/bin/mac
-          cp $(which whisper-cpp) resources/bin/mac/whisper-cli || true
-          cp $(which ffmpeg) resources/bin/mac/ffmpeg
+
+          # whisper.cpp — build from source with static linking + Metal embedded
+          git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git /tmp/whisper-build
+          cd /tmp/whisper-build
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
+            -DGGML_METAL=ON \
+            -DGGML_METAL_EMBED_LIBRARY=ON \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DWHISPER_BUILD_EXAMPLES=ON \
+            -DWHISPER_BUILD_SERVER=ON
+          cmake --build build -j$(sysctl -n hw.ncpu) --config Release
+          cp build/bin/whisper-cli $GITHUB_WORKSPACE/resources/bin/mac/whisper-cli
+          cp build/bin/whisper-server $GITHUB_WORKSPACE/resources/bin/mac/whisper-server || true
+          cd $GITHUB_WORKSPACE
+
+          # ffmpeg — static build from eugeneware/ffmpeg-static (no .dylib deps)
+          curl -L -o ffmpeg.gz "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-arm64.gz"
+          gunzip -f ffmpeg.gz
+          mv ffmpeg resources/bin/mac/ffmpeg
+
           chmod +x resources/bin/mac/*
 
+          # Ad-hoc sign each binary so they share a consistent signature inside the .app
+          codesign --force --sign - resources/bin/mac/whisper-cli
+          codesign --force --sign - resources/bin/mac/whisper-server 2>/dev/null || true
+          codesign --force --sign - resources/bin/mac/ffmpeg
+
+          echo "=== Binaries ==="
+          ls -la resources/bin/mac/
+          file resources/bin/mac/*
+          echo "=== Dylib check ==="
+          otool -L resources/bin/mac/ffmpeg || true
+          otool -L resources/bin/mac/whisper-cli || true
+
       - name: Build & Package
-        run: npm run build && npx electron-builder --mac --publish always
+        run: |
+          npm run build
+          npx electron-builder --mac --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
