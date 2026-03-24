@@ -387,6 +387,12 @@ app.whenReady().then(async () => {
     log("[startup] Missing binaries! Run 'npm run setup'");
   }
 
+  // Detect reinstall: config says onboarding done but no model exists → fresh install, reset everything
+  if (getConfig("onboardingDone") && !hasModel) {
+    log("[startup] Reinstall detected (config exists but no model). Resetting config.");
+    config.clear();
+  }
+
   const needsOnboarding = !getConfig("onboardingDone") || !hasModel;
   if (needsOnboarding && recordingWindow && !recordingWindow.isDestroyed()) {
     // Wait for renderer to be ready, then show onboarding
