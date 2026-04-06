@@ -42,6 +42,7 @@ app.commandLine.appendSwitch("disable-gpu-cache");
 let recordingWindow: BrowserWindow | null = null;
 let isRecording = false;
 let isQuitting = false;
+let rendererReady = false;
 
 // Safe IPC send - won't crash if window is destroyed
 function send(channel: string, ...args: any[]) {
@@ -74,9 +75,16 @@ function createRecordingWindow(): BrowserWindow {
 
   win.setAlwaysOnTop(true, "screen-saver");
 
-  // Prevent DPI scaling from clipping content on Windows (e.g. 125% DPI)
+  // Mark renderer as ready + prevent DPI scaling from clipping content on Windows
   win.webContents.on("did-finish-load", () => {
     win.webContents.setZoomFactor(1);
+    rendererReady = true;
+    log("[startup] Renderer ready (did-finish-load)");
+    // Flush any action that was waiting for the renderer
+    if (pendingStartRecording) {
+      pendingStartRecording = false;
+      startRecording();
+    }
   });
 
   // Dev mode: open DevTools + Ctrl+Shift+I toggle
@@ -123,10 +131,20 @@ function unregisterStopShortcuts() {
   } catch {}
 }
 
+let pendingStartRecording = false;
+
 function startRecording() {
   if (isRecording) return;
   if (!recordingWindow || recordingWindow.isDestroyed()) {
+    rendererReady = false;
     recordingWindow = createRecordingWindow();
+  }
+
+  // Gate: if renderer hasn't loaded yet, queue the action
+  if (!rendererReady) {
+    log("[hotkey] Renderer not ready — queuing startRecording");
+    pendingStartRecording = true;
+    return;
   }
 
   isRecording = true;
@@ -186,17 +204,24 @@ app.whenReady().then(async () => {
   // Setup system tray
   setupTray(app, handleHotkey, () => {
     if (recordingWindow && !recordingWindow.isDestroyed()) {
-      // Send settings IPC BEFORE showing to avoid pill flash
-      send("show:settings");
-      setTimeout(() => {
-        if (recordingWindow && !recordingWindow.isDestroyed()) {
-          recordingWindow.setFocusable(true);
-          recordingWindow.setContentSize(880, 640);
-          recordingWindow.center();
-          recordingWindow.show();
-          recordingWindow.focus();
-        }
-      }, 50);
+      const showSettings = () => {
+        send("show:settings");
+        setTimeout(() => {
+          if (recordingWindow && !recordingWindow.isDestroyed()) {
+            recordingWindow.setFocusable(true);
+            recordingWindow.setContentSize(880, 640);
+            recordingWindow.center();
+            recordingWindow.show();
+            recordingWindow.focus();
+          }
+        }, 50);
+      };
+      // Wait for renderer if not ready yet
+      if (!rendererReady) {
+        recordingWindow.webContents.once("did-finish-load", showSettings);
+      } else {
+        showSettings();
+      }
     }
   });
 
@@ -212,6 +237,7 @@ app.whenReady().then(async () => {
   globalShortcut.unregisterAll();
   const hotkey = getConfig("hotkey");
   const success = globalShortcut.register(hotkey, handleHotkey);
+  log(`[startup] Hotkey "${hotkey}" registered: ${success}`);
 
   // IPC Handlers (register BEFORE server start so they're ready immediately)
   ipcMain.handle("audio:process", async (_event, buffer: ArrayBuffer) => {
@@ -409,9 +435,11 @@ app.whenReady().then(async () => {
   // macOS: request accessibility permission (needed for nut-js to simulate Cmd+V)
   if (process.platform === "darwin") {
     const { systemPreferences } = require("electron");
-    if (!systemPreferences.isTrustedAccessibilityClient(false)) {
-      // Prompt once — macOS will show the system dialog
+    const isTrusted = systemPreferences.isTrustedAccessibilityClient(false);
+    log(`[startup] macOS accessibility permission: ${isTrusted ? "granted" : "NOT granted"}`);
+    if (!isTrusted) {
       systemPreferences.isTrustedAccessibilityClient(true);
+      log("[startup] macOS accessibility prompt triggered — app may need restart after granting");
     }
   }
 

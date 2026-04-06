@@ -1,4 +1,5 @@
 import { clipboard } from "electron";
+import { execSync } from "node:child_process";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -24,6 +25,7 @@ export async function injectText(text: string): Promise<void> {
 }
 
 async function simulatePaste(): Promise<void> {
+  // Try nut-js first (works on all platforms when permissions are granted)
   try {
     const { keyboard, Key } = await import("@nut-tree-fork/nut-js");
 
@@ -34,7 +36,18 @@ async function simulatePaste(): Promise<void> {
       await keyboard.pressKey(Key.LeftControl, Key.V);
       await keyboard.releaseKey(Key.LeftControl, Key.V);
     }
+    return;
   } catch {
-    // nut-js not available - text stays in clipboard
+    // nut-js failed — try platform fallback
+  }
+
+  // macOS fallback: AppleScript via System Events (uses AppleEvents permission, not Accessibility)
+  if (process.platform === "darwin") {
+    try {
+      execSync('osascript -e \'tell application "System Events" to keystroke "v" using command down\'', { timeout: 3000 });
+      return;
+    } catch {
+      console.warn("[injector] Both nut-js and osascript paste failed on macOS");
+    }
   }
 }
