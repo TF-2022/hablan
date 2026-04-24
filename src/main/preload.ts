@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer } from "electron";
 contextBridge.exposeInMainWorld("electronAPI", {
   sendAudio: (buffer: ArrayBuffer) => ipcRenderer.invoke("audio:process", buffer),
   notifyStop: () => ipcRenderer.invoke("recording:user-stop"),
+  notifyReady: () => ipcRenderer.invoke("renderer:ready"),
   completeOnboarding: () => ipcRenderer.invoke("onboarding:complete"),
 
   getSettings: () => ipcRenderer.invoke("settings:get"),

@@ -43,12 +43,20 @@ let recordingWindow: BrowserWindow | null = null;
 let isRecording = false;
 let isQuitting = false;
 let rendererReady = false;
+const pendingRendererActions: Array<() => void> = [];
 
 // Safe IPC send - won't crash if window is destroyed
 function send(channel: string, ...args: any[]) {
   if (recordingWindow && !recordingWindow.isDestroyed()) {
     recordingWindow.webContents.send(channel, ...args);
   }
+}
+
+// Run `fn` once the renderer has signaled readiness (React mounted + IPC listeners registered).
+// Prevents cold-boot races where send() fires before listeners subscribe.
+function runWhenRendererReady(fn: () => void) {
+  if (rendererReady) fn();
+  else pendingRendererActions.push(fn);
 }
 
 function createRecordingWindow(): BrowserWindow {
@@ -75,16 +83,14 @@ function createRecordingWindow(): BrowserWindow {
 
   win.setAlwaysOnTop(true, "screen-saver");
 
-  // Mark renderer as ready + prevent DPI scaling from clipping content on Windows
+  // Prevent DPI scaling from clipping content on Windows.
+  // NOTE: rendererReady is NOT set here — it's set by the "renderer:ready" IPC
+  // sent from React once its useEffect has registered the IPC listeners.
+  // did-finish-load fires when HTML/JS loads, which is BEFORE React mounts —
+  // sending IPC events at that point would be lost (no subscribers yet).
   win.webContents.on("did-finish-load", () => {
     win.webContents.setZoomFactor(1);
-    rendererReady = true;
-    log("[startup] Renderer ready (did-finish-load)");
-    // Flush any action that was waiting for the renderer
-    if (pendingStartRecording) {
-      pendingStartRecording = false;
-      startRecording();
-    }
+    log("[startup] Renderer HTML loaded (waiting for React ready signal)");
   });
 
   // Dev mode: open DevTools + Ctrl+Shift+I toggle
@@ -140,8 +146,9 @@ function startRecording() {
     recordingWindow = createRecordingWindow();
   }
 
-  // Gate: if renderer hasn't loaded yet, queue the action
+  // Gate: if renderer hasn't signaled readiness yet, queue the action
   if (!rendererReady) {
+    if (pendingStartRecording) return; // dedupe rapid hotkey presses
     log("[hotkey] Renderer not ready — queuing startRecording");
     pendingStartRecording = true;
     return;
@@ -216,12 +223,7 @@ app.whenReady().then(async () => {
           }
         }, 50);
       };
-      // Wait for renderer if not ready yet
-      if (!rendererReady) {
-        recordingWindow.webContents.once("did-finish-load", showSettings);
-      } else {
-        showSettings();
-      }
+      runWhenRendererReady(showSettings);
     }
   });
 
@@ -316,6 +318,22 @@ app.whenReady().then(async () => {
       hideIfNotRecording(2000);
       return { success: false, error: err.message };
     }
+  });
+
+  // Renderer signals it's fully mounted and IPC listeners are registered.
+  // This is the authoritative "ready" signal — NOT did-finish-load, which fires too early.
+  ipcMain.handle("renderer:ready", () => {
+    if (rendererReady) return;
+    rendererReady = true;
+    log(`[startup] Renderer React ready — flushing ${pendingRendererActions.length + (pendingStartRecording ? 1 : 0)} pending action(s)`);
+    if (pendingStartRecording) {
+      pendingStartRecording = false;
+      startRecording();
+    }
+    const queued = pendingRendererActions.splice(0);
+    queued.forEach((fn) => {
+      try { fn(); } catch (e: any) { log(`[startup] pending action error: ${e?.message || e}`); }
+    });
   });
 
   // User stopped recording from renderer (Space/Escape/button)
@@ -421,8 +439,7 @@ app.whenReady().then(async () => {
 
   const needsOnboarding = !getConfig("onboardingDone") || !hasModel;
   if (needsOnboarding && recordingWindow && !recordingWindow.isDestroyed()) {
-    // Wait for renderer to be ready, then show onboarding
-    recordingWindow.webContents.once("did-finish-load", () => {
+    runWhenRendererReady(() => {
       if (!recordingWindow || recordingWindow.isDestroyed()) return;
       send("show:onboarding");
       recordingWindow.setFocusable(true);

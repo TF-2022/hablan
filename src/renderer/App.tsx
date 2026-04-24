@@ -82,6 +82,9 @@ export default function App() {
       }),
     ];
 
+    // Signal main: IPC listeners active, safe to send events (fixes cold-boot race)
+    api.notifyReady();
+
     return () => cleanups.forEach((fn) => fn());
   }, [handleStartRecording, handleStopRecording, openSettings]);
 

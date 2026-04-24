@@ -20,6 +20,7 @@ export interface ModelProgress {
 export interface ElectronAPI {
   sendAudio: (buffer: ArrayBuffer) => Promise<PipelineResult>;
   notifyStop: () => Promise<void>;
+  notifyReady: () => Promise<void>;
   completeOnboarding: () => Promise<void>;
   getSettings: () => Promise<Record<string, unknown>>;
   setSetting: (key: string, value: unknown) => Promise<void>;
