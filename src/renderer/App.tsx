@@ -82,10 +82,23 @@ export default function App() {
       }),
     ];
 
-    // Signal main: IPC listeners active, safe to send events (fixes cold-boot race)
-    api.notifyReady();
+    // Signal main: IPC listeners active, safe to send events (fixes cold-boot race).
+    // Retry if main's "renderer:ready" handler isn't registered yet — otherwise the
+    // invoke rejects and the readiness signal is silently lost.
+    let cancelled = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const signalReady = () => {
+      api!.notifyReady().catch(() => {
+        if (!cancelled) retry = setTimeout(signalReady, 50);
+      });
+    };
+    signalReady();
 
-    return () => cleanups.forEach((fn) => fn());
+    return () => {
+      cancelled = true;
+      if (retry) clearTimeout(retry);
+      cleanups.forEach((fn) => fn());
+    };
   }, [handleStartRecording, handleStopRecording, openSettings]);
 
   // Check if onboarding is needed on mount + load inputDevice

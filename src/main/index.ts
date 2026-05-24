@@ -43,6 +43,7 @@ let recordingWindow: BrowserWindow | null = null;
 let isRecording = false;
 let isQuitting = false;
 let rendererReady = false;
+let pillRepaintDone = false;
 const pendingRendererActions: Array<() => void> = [];
 
 // Safe IPC send - won't crash if window is destroyed
@@ -59,7 +60,25 @@ function runWhenRendererReady(fn: () => void) {
   else pendingRendererActions.push(fn);
 }
 
+// Curative counterpart to backgroundColor/backgroundThrottling: once per window
+// lifetime, on the first real show, nudge the content size by 1px so Chromium
+// reallocates and repaints the compositing surface. If the surface was stuck
+// opaque (black) from a cold boot, this forces it transparent. The 1px height
+// change is imperceptible (the pill is a 48px capsule centered in a 72px window).
+function forcePillRepaint() {
+  if (pillRepaintDone || !recordingWindow || recordingWindow.isDestroyed()) return;
+  pillRepaintDone = true;
+  const [w, h] = recordingWindow.getContentSize();
+  recordingWindow.setContentSize(w, h + 1);
+  setTimeout(() => {
+    if (recordingWindow && !recordingWindow.isDestroyed()) recordingWindow.setContentSize(w, h);
+  }, 50);
+}
+
 function createRecordingWindow(): BrowserWindow {
+  // Fresh window → its transparent backing surface hasn't been kicked yet.
+  pillRepaintDone = false;
+
   const win = new BrowserWindow({
     width: 260,
     height: 72,
@@ -67,6 +86,14 @@ function createRecordingWindow(): BrowserWindow {
     show: false,
     frame: false,
     transparent: true,
+    // Fully-transparent ARGB. Without this, a transparent frameless window
+    // created before the Windows compositor (DWM) is warm — i.e. at OS cold
+    // boot via launch-at-startup — allocates an OPAQUE backing surface and
+    // renders as a black box for the window's whole lifetime.
+    backgroundColor: "#00000000",
+    // The window stays hidden from boot until the first hotkey; paint its
+    // surface eagerly while hidden so the first show isn't a blank/stale frame.
+    paintWhenInitiallyHidden: true,
     hasShadow: false,
     alwaysOnTop: true,
     skipTaskbar: true,
@@ -78,6 +105,9 @@ function createRecordingWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       zoomFactor: 1,
+      // Chromium throttles/suspends compositing for hidden windows. Keep it
+      // alive so the long hidden-since-boot period doesn't stall the surface.
+      backgroundThrottling: false,
     },
   });
 
@@ -164,6 +194,7 @@ function startRecording() {
     recordingWindow.setPosition(Math.round((screenW - 260) / 2), screenH - 100);
   }
   recordingWindow.showInactive();
+  forcePillRepaint(); // cold-boot: unstick a possibly-opaque transparent surface
   send("recording:start");
   registerStopShortcuts();
 }
