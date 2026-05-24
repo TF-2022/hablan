@@ -1,72 +1,49 @@
-name: Build & Release
+name: Release
 
+# Releases are intentional, driven by a version tag — NOT by every push to main.
+# Cut a release locally with `npm run release` (bumps package.json, commits
+# "release: vX", tags vX, pushes main + tags). The pushed tag triggers this
+# workflow. Pushing plain code to main no longer builds or publishes anything.
 on:
   push:
-    branches: [main]
-    paths-ignore:
-      - "**.md"
-      - ".gitignore"
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)build & publish, e.g. v1.0.11"
+        required: true
+
+# One build per tag. Don't cancel an in-flight release if re-triggered.
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
-  version-and-tag:
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.bump.outputs.version }}
-      tag: ${{ steps.bump.outputs.tag }}
-      should_release: ${{ steps.check.outputs.should_release }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Check if release needed
-        id: check
-        run: |
-          # Skip if last commit is a version bump (avoid infinite loop)
-          LAST_MSG=$(git log -1 --pretty=%s)
-          if [[ "$LAST_MSG" == release:* ]]; then
-            echo "should_release=false" >> $GITHUB_OUTPUT
-            echo "Skipping: last commit is a release bump"
-          else
-            echo "should_release=true" >> $GITHUB_OUTPUT
-          fi
-
-      - uses: actions/setup-node@v4
-        if: steps.check.outputs.should_release == 'true'
-        with:
-          node-version: 22
-
-      - name: Bump version and create tag
-        if: steps.check.outputs.should_release == 'true'
-        id: bump
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          NEW_VERSION=$(npm version patch -m "release: v%s" --no-git-tag-version)
-          VERSION=${NEW_VERSION#v}
-          git add package.json package-lock.json
-          git commit -m "release: v${VERSION}"
-          git tag "v${VERSION}"
-          git push origin main --tags
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "tag=v${VERSION}" >> $GITHUB_OUTPUT
-
   build-windows:
-    needs: version-and-tag
-    if: needs.version-and-tag.outputs.should_release == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.version-and-tag.outputs.tag }}
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+
+      # whisper.cpp + ffmpeg are large pre-built downloads; the download script
+      # is idempotent (skips files that exist), so a restored cache short-circuits
+      # it. Key on the script so a URL/version change busts the cache.
+      - name: Cache native binaries
+        id: cache-bin
+        uses: actions/cache@v4
+        with:
+          path: resources/bin
+          key: win-bin-v1-${{ hashFiles('scripts/download-binaries.mjs') }}
 
       - name: Install dependencies
         run: npm install --legacy-peer-deps
@@ -75,6 +52,7 @@ jobs:
         run: node scripts/generate-icons.mjs
 
       - name: Download whisper.cpp + ffmpeg
+        if: steps.cache-bin.outputs.cache-hit != 'true'
         run: node scripts/download-binaries.mjs
 
       - name: Build & Package
@@ -83,18 +61,31 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-macos:
-    needs: version-and-tag
-    if: needs.version-and-tag.outputs.should_release == 'true'
     runs-on: macos-latest
+    # Bump this suffix to force a fresh whisper.cpp compile (e.g. to pick up a
+    # newer upstream). Otherwise the compiled+signed binaries are reused.
+    env:
+      MAC_BIN_CACHE: v1
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.version-and-tag.outputs.tag }}
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+
+      # Compiling whisper.cpp from source is the slowest, most flaky step (git
+      # clone + cmake). Cache the compiled, ad-hoc-signed binaries. On an exact
+      # hit the heavy block is skipped; any miss recompiles, so this can only
+      # speed things up — never break a release.
+      - name: Cache compiled macOS binaries
+        id: cache-mac-bin
+        uses: actions/cache@v4
+        with:
+          path: resources/bin/mac
+          key: mac-bin-${{ env.MAC_BIN_CACHE }}
 
       - name: Install dependencies
         run: npm install --legacy-peer-deps
@@ -103,6 +94,7 @@ jobs:
         run: node scripts/generate-icons.mjs
 
       - name: Build whisper.cpp (static) + download ffmpeg (static)
+        if: steps.cache-mac-bin.outputs.cache-hit != 'true'
         run: |
           mkdir -p resources/bin/mac
 
@@ -150,15 +142,15 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
   publish-release:
-    needs: [version-and-tag, build-windows, build-macos]
-    if: always() && needs.version-and-tag.outputs.should_release == 'true' && (needs.build-windows.result == 'success' || needs.build-macos.result == 'success')
+    needs: [build-windows, build-macos]
+    if: always() && (needs.build-windows.result == 'success' || needs.build-macos.result == 'success')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Publish release
         run: |
-          TAG="${{ needs.version-and-tag.outputs.tag }}"
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
           gh release edit "$TAG" --draft=false --latest 2>/dev/null \
             || gh release create "$TAG" --title "$TAG" --generate-notes --latest
         env:
